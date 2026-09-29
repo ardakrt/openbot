@@ -129,8 +129,9 @@ when a server is idle or boat stops a sandbox; and `error` and `deleted`. The Wo
    shorter interval starts at the next period. The Worker copies the new plan, interval and currency
    to the server. boat changes the machine of a sandbox only on a resume (`type`), so the Worker
    stops a running server (boat saves the disk) and resumes it on the machine of the new plan. The
-   server is offline for this time. The cron does this for a server that was not running at the
-   plan change. When the data does not fit a smaller machine, boat refuses it
+   server is offline for this time, so the Worker waits until the server has no use: no activity
+   report for 7 minutes (a server in use reports each 5 minutes). A server that stops for no use,
+   or that was not running at the plan change, gets the new machine at its next resume. When the data does not fit a smaller machine, boat refuses it
    (`409 type_too_small`); the server then starts on its old machine, and the Worker does not try
    again until the next plan change.
 9. **Delete.** `DELETE /v2/hosting/servers/:id` with `{confirmName}`. The Worker first closes the
