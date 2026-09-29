@@ -231,8 +231,9 @@ servers, their webhooks and the cron continue.
    seconds.
 2. **Template.** Build it from the release AppImage with the production account service:
    `bun run hosting:template --version=<v> --appimage-url=<release AppImage URL>
-   --appimage-sha256=<hex> --auth-api-url=https://api.openbot.run`. Build a new template for each
-   release. A new template applies only to new servers.
+   --appimage-sha256=<hex> --auth-api-url=https://api.openbot.run`. A server updates itself to
+   each new release ([Updates](#updates)), so a new template only makes the first start of a new
+   server faster.
 3. **Webhooks and secrets.** Put the live Stripe key and the Worker boat key in the shell, so they
    are not in the history, and run the setup with `gh` signed in:
 
@@ -272,7 +273,7 @@ use, and the checks that repair a missed webhook run at most 5 minutes late.
 
 ## Build the server template
 
-The template is a boat named snapshot. Build one for each OpenBot release that servers use:
+The template is a boat named snapshot. Build one from a release; each server then updates itself:
 
 ```sh
 BOAT_TEMPLATE_API_KEY=... bun run hosting:template --version=0.9.0 \
@@ -284,15 +285,56 @@ BOAT_TEMPLATE_API_KEY=... bun run hosting:template --version=0.9.0 \
 named snapshot access. The script:
 
 1. creates a builder sandbox with `noEnv`;
-2. uploads `scripts/hosting/` and runs `provision.sh` with `sudo`. It installs Xvfb, D-Bus,
-   gnome-keyring, the Electron libraries and the remote desktop runtime libraries, checks the AppImage SHA-256, unpacks the AppImage to
-   `/opt/OpenBot/app`, adds an AppArmor profile that lets Chromium make user namespaces, and
-   enables `openbot.service`;
+2. uploads `scripts/hosting/` and runs `provision.sh` with `sudo`. It installs the packages in
+   `packages.txt` (Xvfb, D-Bus, gnome-keyring, the Electron libraries and the remote desktop runtime
+   libraries), checks the AppImage SHA-256, unpacks the AppImage to `/opt/OpenBot/app`, adds an
+   AppArmor profile that lets Chromium make user namespaces, and enables `openbot.service` and the
+   [update](#updates) units;
 3. checks that OpenBot did not start and that no profile or claim exists;
 4. saves the builder as `openbot-server-<version>` and deletes the builder.
 
-The builder never starts OpenBot, so the template has no host identity and no session. A new
-template applies only to new servers. boat keeps at most 10 named snapshots for each account.
+The builder never starts OpenBot, so the template has no host identity and no session. boat keeps
+at most 10 named snapshots for each account.
+
+### Updates
+
+The Linux build contains `scripts/hosting/` (without the TypeScript files) in `resources/hosting`.
+On a server, root runs `openbot-hosted-update`:
+
+1. `openbot-update.timer` runs `stage` 5 minutes after each start of the timer and then each 6
+   hours. It reads the `latest-linux.yml` of the latest GitHub release, the manifest that the Linux
+   desktop updater reads. When that version is newer than the installed one, it downloads the
+   AppImage, checks its SHA-512 against the manifest, unpacks it in `/var/tmp`, installs the
+   packages in the `packages.txt` of that release, and copies it to `/opt/OpenBot/staged`.
+   `staged.ready` comes after the last file. OpenBot keeps running. The download and unpack use
+   idle CPU and disk priority.
+2. `openbot-update-apply.service` runs `apply` at boot, before `openbot.service`. boat stop and resume
+   work like a reboot, so the new release starts at the next wake of the server, not during use. It
+   copies `staged` to `app`, and then installs the scripts, AppArmor profile and units of the new
+   release. A stop during the copy leaves `.applying`, and the next boot copies again. A failure
+   does not stop OpenBot: it starts the release that is in place.
+
+boat saves `/opt` by the paths that change, and it does not look into a directory that a rename
+moves. After the next stop, such a directory is empty or has its old files. So a release gets to
+`/opt` only as a copy of each file, never with `mv`. A file rename is safe. [Observed on a boat VM
+with a probe; not in boat documentation.]
+
+boat resumes a server on a machine that booted before, restores the disk lazily, and starts the
+units before the restore ends. Both commands wait until the restore ends (at most 4 minutes).
+[Not confirmed in boat documentation: the `active` and `hydration-done` files in
+`/var/lib/ascii-lazy` that mark the restore. Observed on a boat VM.] `apply` never removes a staged
+release that is not complete.
+
+A server only moves to a newer version: an older OpenBot cannot open a database that a newer one
+migrated. A staged release that is no longer the latest one, for example a withdrawn release, is
+removed and does not apply. A release without `resources/hosting` cannot update a server.
+
+A server that has no updater, such as one made from a template before 0.25.3 [not confirmed: the
+first release with this change], needs one upgrade by hand. With a boat key that has command and
+file access: upload `scripts/hosting/` to `/tmp/openbot-upgrade`, run `sudo systemctl stop
+openbot.service`, run `sudo bash /tmp/openbot-upgrade/provision.sh user <AppImage URL> <SHA-256>
+https://api.openbot.run` as a detached command, and start the service again. The data in the home
+folder and in `/srv` stays.
 
 On a server, `openbot-hosted-server` starts a D-Bus session, unlocks a gnome-keyring with a
 random password for each server (so `safeStorage` can keep the account session), and runs OpenBot
