@@ -62,9 +62,12 @@ export const messages = {
   "error.team.membersCannotArchiveChannels": "Les membres ne peuvent pas archiver de canaux.",
   "error.team.sharedDataUnsupported": "Les données partagées ne sont pas prises en charge par cette connexion.",
   "error.team.agentInstallUnsupported": "L’ajout d’agents n’est pas pris en charge par cette connexion.",
+  "error.team.agentPublishUnsupported": "La publication d’agents n’est pas prise en charge par cette connexion.",
   "error.team.agentUpdateUnsupported": "La mise à jour des agents n’est pas prise en charge par cette connexion.",
   "error.team.contextResetUnsupported":
     "Commencer une nouvelle discussion n’est pas pris en charge par cette connexion.",
+  "error.team.agentImportUnsupported": "L’importation d’agents n’est pas prise en charge par cette connexion.",
+  "error.team.liveActivityUnsupported": "Cet hôte ne peut pas mettre à jour l’activité en direct d’un téléphone.",
   "error.team.agentUpdateTargetRequired": "Un agent à mettre à jour est requis.",
   "error.team.queueEditUnsupported": "Ce client ne prend pas en charge la modification de la file d’attente.",
   "error.team.skillsUnsupported": "Les compétences ne sont pas prises en charge par cette connexion.",

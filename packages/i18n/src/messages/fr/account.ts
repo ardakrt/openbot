@@ -15,6 +15,8 @@ export const messages = {
   "account.menu.account": "Compte",
   "account.menu.profile": "Profil",
   "account.menu.settings": "Réglages",
+  "account.menu.billing": "Facturation",
+  "account.menu.accountSettings": "Réglages du compte",
   "account.menu.marketplace": "Marketplace",
   "account.menu.providersPermissions": "Fournisseurs et autorisations",
   "account.menu.help": "Aide",

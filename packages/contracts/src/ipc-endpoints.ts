@@ -17,6 +17,14 @@
 import type { ManagedProviderId } from "./agent-providers";
 import type { AppLanguagePreference, SetAppLanguagePreferenceInput } from "./app-language";
 import type { AppLogoColorPreference, SetAppLogoColorPreferenceInput } from "./app-logo-color";
+import type { BillingPortalRequest, BillingState } from "./billing";
+import type {
+  CreateHostedServerInput,
+  DeleteHostedServerInput,
+  HostedServerCatalog,
+  HostedServerList,
+  HostedServerSummary,
+} from "./hosted-servers";
 import type { AddedAgent, AgentAdminSettings, UpdateAgentAdminSettingsInput } from "./ipc-agent-admin";
 import type { AgentAnalytics, AgentAnalyticsInput } from "./ipc-agent-analytics";
 import type { AgentIpcRequest, ScopedAgentEvent } from "./ipc-agent-events";
@@ -564,6 +572,23 @@ export const IPC_ENDPOINTS = {
     replace: request<ReplaceHostedSiteInput, HostedSiteSummary>()("hosted-sites:replace"),
     delete: request<DeleteHostedSiteInput, void>()("hosted-sites:delete"),
   },
+  // The account's Stripe subscription. The main process gets the Checkout or Portal URL from the
+  // account server and opens it in the browser, so the renderer never sends a URL.
+  billing: {
+    getState: request<undefined, BillingState>()("billing:get-state"),
+    openPortal: request<BillingPortalRequest, void>()("billing:open-portal"),
+  },
+  // OpenBot servers that the account server runs for this account. `wake` also works for a server
+  // that the account is a member of; it answers 404 for a host that is not a hosted server.
+  hostedServers: {
+    list: request<undefined, HostedServerList>()("hosted-servers:list"),
+    plans: request<undefined, HostedServerCatalog>()("hosted-servers:plans"),
+    // Main opens the Stripe Checkout page and returns only the server, which waits for the payment.
+    create: request<CreateHostedServerInput, HostedServerSummary>()("hosted-servers:create"),
+    openCheckout: request<string, HostedServerSummary>()("hosted-servers:open-checkout"),
+    delete: request<DeleteHostedServerInput, void>()("hosted-servers:delete"),
+    wake: request<string, HostedServerSummary>()("hosted-servers:wake"),
+  },
   marketplaceAgents: {
     list: request<MarketplaceAgentQuery | undefined, MarketplaceAgentPage>()("marketplace-agents:list"),
     get: request<string, MarketplaceAgentDetail>()("marketplace-agents:get"),
@@ -830,11 +855,12 @@ export const IPC_ENDPOINTS = {
     openFile: scopedRequest<OpenStoredFileInput, void, "required">()("storage:open-file"),
     openLocation: request<OpenStorageLocationInput, void>()("storage:open-location"),
   },
-  // Bound against the agent import service, which holds the staged archives.
+  // Bound against the agent import service, which holds the staged archives. A remote server is
+  // reached with `agent-import-v1`; main still opens the file dialog and sends the file.
   agentImport: {
-    choose: request<undefined, AgentImportPreview | null>()("agent-import:choose"),
-    apply: request<ApplyAgentImportInput, AgentImportResult>()("agent-import:apply"),
-    discard: request<string, void>()("agent-import:discard"),
+    choose: scopedQuery<AgentImportPreview | null, "required">()("agent-import:choose"),
+    apply: scopedRequest<ApplyAgentImportInput, AgentImportResult, "required">()("agent-import:apply"),
+    discard: scopedRequest<string, void, "required">()("agent-import:discard"),
     // The export skill for a user who sets up the export agent in Grok Bot by hand. Main reads it
     // from the app's resources, and `saveSkill` asks where to write it.
     readSkill: request<undefined, string>()("agent-import:read-skill"),

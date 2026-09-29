@@ -5,6 +5,7 @@ import { isValidAvatarImage } from "@openbot/contracts/avatar-images";
 import { parseInviteUrl } from "@openbot/contracts/invite-links";
 import type {
   AgentEvent,
+  AgentImportPreview,
   AgentSummary,
   AvatarImageInput,
   ConversationPage,
@@ -40,8 +41,14 @@ import type {
   TeamRealtimeEvent,
   UpdateTeamMemberInput,
 } from "@openbot/contracts/ipc";
-import { LOCAL_SERVER_ID, REMOTE_DESKTOP_SETUP_CAPABILITY, type RemoteDesktopTestInput } from "@openbot/contracts/ipc";
+import {
+  decodeRemoteAgentImportPreview,
+  LOCAL_SERVER_ID,
+  REMOTE_DESKTOP_SETUP_CAPABILITY,
+  type RemoteDesktopTestInput,
+} from "@openbot/contracts/ipc";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
+import { AGENT_IMPORT_ROUTES } from "@openbot/contracts/team-protocol/agent-import-v1";
 import { decodeBrowserViewSessionResponse } from "@openbot/contracts/team-protocol/browser-view-v1";
 import { TEAM_MEMBER_LEAVE_CAPABILITY, type TeamCurrentCapability } from "@openbot/contracts/team-protocol/current";
 import type { HostRestartEvent } from "@openbot/contracts/team-protocol/host-update-v1";
@@ -111,6 +118,8 @@ interface RemoteServerManagerOptions {
   appVersion?: string;
   webrtcTransport?: TeamWebRtcClientTransport;
   getLocalHostId?: () => string | null;
+  /** Signal answered that the host is not connected. A hosted server that stopped is started here. */
+  onHostUnavailable?: (serverId: string) => void;
 }
 
 export interface DevelopmentRemoteServerConnection {
@@ -124,6 +133,8 @@ export interface DevelopmentRemoteServerConnection {
 }
 
 const REMOTE_DUPLICATION_TIMEOUT_MS = TEAM_WEBRTC_REMOTE_REQUEST_TIMEOUT_MILLISECONDS;
+/** An export of up to 100 MB goes up and is read in one request, and apply creates many agents. */
+export const AGENT_IMPORT_UPLOAD_TIMEOUT_MS = TEAM_WEBRTC_REMOTE_REQUEST_TIMEOUT_MILLISECONDS;
 // How long a host that restarts into an update keeps the fast retry after Signal first misses it. A
 // host that is not back by then is offline, as any other host.
 const HOST_RESTART_RETRY_MS = 10 * 60_000;
@@ -144,6 +155,10 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
   readonly #hostRestartAway = new Map<string, number>();
   readonly #webrtcTransport: TeamWebRtcClientTransport | null;
   readonly #getLocalHostId: () => string | null;
+  /** From the last host list. Null before one, or when this computer hosts nothing that the account lists. */
+  #localMemberLimit: number | null = null;
+  readonly #onHostUnavailable: (serverId: string) => void;
+  #appFocused = true;
   readonly #remoteViewerProxy: RemoteViewerProxy | null;
   #selectChain = Promise.resolve();
   #muteExpiryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -168,6 +183,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     this.#allowLocalDevelopmentInvites = options.allowLocalDevelopmentInvites ?? false;
     this.#webrtcTransport = options.webrtcTransport ?? null;
     this.#getLocalHostId = options.getLocalHostId ?? (() => null);
+    this.#onHostUnavailable = options.onHostUnavailable ?? (() => undefined);
     this.#client = new RemoteServerClient({
       appVersion: this.#appVersion,
       servers: this.#store,
@@ -251,7 +267,12 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     });
     this.#webrtcTransport?.on("event", (serverId, event) => this.#handleWebRtcEvent(serverId, event));
     this.#webrtcTransport?.on("error", (serverId, code, message) => {
-      if (code === "host_unavailable" && !this.#awaitsHostRestart(serverId)) this.#events.markHostOffline(serverId);
+      if (code === "host_unavailable" && !this.#awaitsHostRestart(serverId)) {
+        this.#events.markHostOffline(serverId);
+        // A hosted server that stopped for no use starts again only for use: the selected server with
+        // the app in focus. A reconnect in the background does not start it.
+        if (this.#appFocused && serverId === this.#store.activeServerId) this.#onHostUnavailable(serverId);
+      }
       if (!this.#connections.reportTransportError(serverId, code, message)) this.#events.scheduleReconnect(serverId);
       if (code === "session_revoked") this.emit("directoryInvalidated");
     });
@@ -281,8 +302,11 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
   }
 
   list(): ServerSummary[] {
-    return remoteServerSummaries(this.#store.servers, this.#store.activeServerId, (serverId) =>
-      this.#connections.statusFor(serverId),
+    return remoteServerSummaries(
+      this.#store.servers,
+      this.#store.activeServerId,
+      (serverId) => this.#connections.statusFor(serverId),
+      this.#localMemberLimit,
     ).map((server) => {
       const mute = this.#store.muteState(server.id);
       return {
@@ -306,6 +330,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
 
   /** Focus retries an offline host at once. After that, it retries each 5 minutes with focus and each 15 without. */
   setAppFocused(focused: boolean): void {
+    this.#appFocused = focused;
     this.#events.setAppFocused(focused);
   }
 
@@ -364,6 +389,8 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
       }
       this.#emitChanged();
       this.startEventConnections();
+      // The next retry of an offline host can be minutes away, so a selected hosted server starts now.
+      if (this.#events.isHostOffline(serverId)) this.#onHostUnavailable(serverId);
       return this.list();
     });
     this.#selectChain = operation.then(
@@ -975,6 +1002,20 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     return addRemotePreviewUrls(decodeDraftAttachment(value), server.id);
   }
 
+  /** Sends a Grok Bot export to the host with `agent-import-v1` and answers its preview. */
+  async stageAgentImport(serverId: string, bytes: Uint8Array): Promise<AgentImportPreview> {
+    const server = this.#store.require(serverId);
+    const url = new URL(AGENT_IMPORT_ROUTES.stage, server.apiUrl);
+    const response = await this.#client.fetch(
+      server,
+      url,
+      { method: "POST", headers: { "Content-Type": "application/zip" }, body: Buffer.from(bytes) },
+      true,
+      AGENT_IMPORT_UPLOAD_TIMEOUT_MS,
+    );
+    return decodeRemoteAgentImportPreview(await response.json());
+  }
+
   async setAgentAvatar(
     agentId: string,
     image: AvatarImageInput | null,
@@ -1104,12 +1145,15 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
   async #syncWebRtcHosts(): Promise<void> {
     const transport = this.#webrtcTransport;
     if (!transport) return;
+    const hosts = await transport.listHosts();
+    const localHostId = this.#getLocalHostId();
+    this.#localMemberLimit = hosts.find((host) => host.hostId === localHostId)?.memberLimit ?? null;
     const { servers, removedHostIds, staleTransportHostIds, pinnedKeys } = reconcileWebRtcHosts({
-      hosts: await transport.listHosts(),
+      hosts,
       isConnected: (hostId) => transport.isConnected(hostId),
       servers: this.#store.servers,
       preservedIdentities: this.#store.preservedIdentities,
-      localHostId: this.#getLocalHostId(),
+      localHostId,
       isHiddenHost: (hostId) => this.#store.isHiddenHost(hostId),
       username: this.#centralAccount.getEmail().trim().toLowerCase(),
       keepOtherTransports: this.#allowLocalDevelopmentInvites,

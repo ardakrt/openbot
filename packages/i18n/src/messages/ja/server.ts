@@ -64,6 +64,7 @@ export const messages = {
   "server.rail.moved": "サーバーを {total} 件中 {position} 番目に移動しました。",
   "server.rail.label": "サーバー",
   "server.rail.addRemote": "リモートサーバーを追加",
+  "server.rail.add": "サーバーを追加",
   "server.rail.buttonLabel": "{name} サーバー",
   "server.rail.notificationsMuted": "通知はミュート中",
   "server.rail.actions": "サーバーの操作",
@@ -108,7 +109,7 @@ export const messages = {
   "server.settings.storageDescription":
     "OpenBot がこのサーバーのディスクに保存しているものを確認し、空き容量を増やします。",
   "server.settings.importTitle": "インポート",
-  "server.settings.importDescription": "Grok Bot からこのコンピューターにエージェントを移動します。",
+  "server.settings.importDescription": "Grok Bot からこのサーバーにエージェントを移動します。",
   "server.settings.nameTooShort": "{limit} 文字以上で入力してください。",
   "server.settings.nameTooLong": "{limit} 文字以内で入力してください。",
   "server.settings.actionFailedTitle": "サーバーの操作に失敗しました",

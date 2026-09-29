@@ -14,7 +14,10 @@ import { createSignal, createStore, onSettled, Show } from "solid-js";
 import "katex/contrib/copy-tex";
 import { StaticI18nProvider } from "../../i18n-context";
 import { WebWorkspace } from "./WebWorkspace";
+import { WEB_APP_BILLING_PARAM } from "./web-billing";
 import type { WebRuntimeFactory } from "./web-client-context";
+import { takeHostingReturn } from "./web-hosted-servers";
+import { createWebLanguagePreference } from "./web-language-preference";
 
 /** A sign-in refusal that the login form already shows. */
 class SignInIssueShown extends Error {}
@@ -56,6 +59,15 @@ function takePluginLink(): string | null {
   return slug;
 }
 
+/** True on a return from the Stripe Customer Portal, `/app?billing=portal`. The query is removed after it is read. */
+function takeBillingReturn(): boolean {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has(WEB_APP_BILLING_PARAM)) return false;
+  url.searchParams.delete(WEB_APP_BILLING_PARAM);
+  window.history.replaceState(window.history.state, "", url);
+  return true;
+}
+
 export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
   // This component renders the text provider, so it reads the text of the last provider that rendered.
   const text = currentText();
@@ -74,6 +86,8 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
   const [agentTemplateId, setAgentTemplateId] = createSignal(takeAgentTemplateLink());
   const [inviteUrl, setInviteUrl] = createSignal(takeInviteLink());
   const [pluginSlug, setPluginSlug] = createSignal(takePluginLink());
+  const [billingReturn, setBillingReturn] = createSignal(takeBillingReturn());
+  const [hostingReturn, setHostingReturn] = createSignal(takeHostingReturn());
   let channel: BroadcastChannel | null = null;
   let disposed = false;
   let sessionGeneration = 0;
@@ -256,11 +270,11 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
     };
   });
   const variant: AppVariant = import.meta.env.DEV ? "dev" : "production";
-  // The web client has no saved language setting, so it follows the browser.
+  const languagePreference = createWebLanguagePreference();
   return (
     <StaticI18nProvider
-      locale={resolveLocale("system", navigator.language)}
-      formatLocale={formatLocale("system", navigator.language)}
+      locale={resolveLocale(languagePreference.language(), navigator.language)}
+      formatLocale={formatLocale(languagePreference.language(), navigator.language)}
     >
       <div class="web-app">
         <Toaster />
@@ -301,6 +315,12 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
                 onInviteClose={() => setInviteUrl(null)}
                 pluginSlug={pluginSlug()}
                 onPluginSlugConsumed={() => setPluginSlug(null)}
+                billingReturn={billingReturn()}
+                onBillingReturnConsumed={() => setBillingReturn(false)}
+                hostingReturn={hostingReturn()}
+                onHostingReturnConsumed={() => setHostingReturn(null)}
+                language={languagePreference.language()}
+                onChangeLanguage={languagePreference.setLanguage}
               />
             )}
           </Show>

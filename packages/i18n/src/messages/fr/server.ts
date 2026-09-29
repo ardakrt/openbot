@@ -68,6 +68,7 @@ export const messages = {
   "server.rail.moved": "Serveur déplacé en position {position} sur {total}.",
   "server.rail.label": "Serveurs",
   "server.rail.addRemote": "Ajouter un serveur distant",
+  "server.rail.add": "Ajouter un serveur",
   "server.rail.buttonLabel": "Serveur {name}",
   "server.rail.notificationsMuted": "notifications en sourdine",
   "server.rail.actions": "Actions du serveur",
@@ -108,7 +109,7 @@ export const messages = {
   "server.settings.storageDescription":
     "Voyez ce qu’OpenBot conserve sur le disque de ce serveur et libérez de l’espace.",
   "server.settings.importTitle": "Importer",
-  "server.settings.importDescription": "Déplacez vos agents de Grok Bot vers cet ordinateur.",
+  "server.settings.importDescription": "Déplacez vos agents de Grok Bot vers ce serveur.",
   "server.settings.nameTooShort": "Saisissez au moins {limit} caractères.",
   "server.settings.nameTooLong": "N’utilisez pas plus de {limit} caractères.",
   "server.settings.actionFailedTitle": "L’action sur le serveur a échoué",

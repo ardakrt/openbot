@@ -59,8 +59,16 @@ import { AgentInitializationGate } from "./agent-initialization";
 import { AgentMarketplaceService } from "./agent-marketplace-service";
 import { AgentTemplateService } from "./agent-template-service";
 import { HostAnalytics } from "./analytics";
+import { analyticsInventoryDayStore, collectAnalyticsInventory } from "./analytics-inventory";
+import {
+  type CatalogPluginServer,
+  catalogPluginSlug,
+  isReportedMcpServerName,
+  loadCatalogPluginServers,
+} from "./analytics-plugin-catalog";
 import { readAnalyticsPreference } from "./analytics-preference-store";
 import { ApprovalAutomation, readApprovalAutomation } from "./approval-automation-store";
+import { BillingDesktopService } from "./billing-service";
 import { BrowserPictureInPicture } from "./browser-picture-in-picture";
 import { BrowserViewClient } from "./browser-view-client";
 import { CentralAuthManager, readCentralAuthApiUrl, readMobileConnectApiUrl } from "./central-auth-manager";
@@ -90,6 +98,10 @@ import { performDynamicIslandCriticalAction } from "./dynamic-island-actions";
 import { DynamicIslandWindowController } from "./dynamic-island-window";
 import { HostService } from "./host-service";
 import { HostUpdateCoordinator } from "./host-update-coordinator";
+import { CLIENT_USE_WINDOW_MS, HostedServerActivity } from "./hosted-server-activity";
+import { applyHostedServerAccount, type HostedServerEnvironment } from "./hosted-server-bootstrap";
+import { HostedServerDesktopService, withHostingDeveloperKey } from "./hosted-server-service";
+import { HostedServerStartRetry } from "./hosted-server-start-retry";
 import { HostedSiteDesktopService } from "./hosted-site-service";
 import { LanguageService } from "./language-service";
 import { LogoColorService } from "./logo-color-service";
@@ -151,6 +163,7 @@ import { VoiceTranscriptionService } from "./voice-transcription-service";
 const logger = createOpenBotLogger("application-services");
 const SETUP_FILE = "openbot-setup-v2.json";
 const ANALYTICS_PREFERENCE_FILE = "openbot-analytics-preference-v1.json";
+const ANALYTICS_INVENTORY_FILE = "openbot-analytics-inventory-v1.json";
 const APPROVAL_AUTOMATION_FILE = "openbot-approval-automation-v2.json";
 const LEGACY_APPROVAL_AUTOMATION_FILE = "openbot-approval-automation-v1.json";
 const LANGUAGE_PREFERENCE_FILE = "openbot-language-preference-v1.json";
@@ -191,6 +204,8 @@ const TEARDOWN_ORDER = {
   updater: 10,
   hostUpdateCoordinator: 12,
   requestedUpdate: 13,
+  hostedServerStartRetry: 14,
+  hostedServerActivity: 15,
   computerUseHighlight: 18,
   computerUsePermissionHelp: 19,
   dynamicIsland: 20,
@@ -222,6 +237,10 @@ export interface ApplicationServiceContext {
   appVariant: AppVariant;
   developmentRemoteRole: DevelopmentRemoteRole | null;
   developmentTestClientEnabled: boolean;
+  /** Set only in a hosted server VM. */
+  hostedServer: HostedServerEnvironment | null;
+  /** Set only by `bun run dev --hosting=test`. */
+  hostingDeveloperKey: string | null;
   macHapticFeedback: MacHapticFeedback;
   teardown: TeardownRegistry;
   forwardCentralAuth: (state: CentralAuthState) => void;
@@ -265,6 +284,8 @@ export interface ApplicationServices {
   centralAuth: CentralAuthManager;
   skills: SkillMarketplaceService;
   hostedSites: HostedSiteDesktopService;
+  billing: BillingDesktopService;
+  hostedServers: HostedServerDesktopService;
   customProviders: CustomProviderStore;
   customProviderChanges: CustomProviderChanges;
   customAgentChanges: CustomAgentChanges;
@@ -319,6 +340,8 @@ export async function createApplicationServices({
   appVariant,
   developmentRemoteRole,
   developmentTestClientEnabled,
+  hostedServer,
+  hostingDeveloperKey,
   macHapticFeedback,
   teardown,
   forwardCentralAuth,
@@ -429,6 +452,16 @@ export async function createApplicationServices({
   await skillCreator.syncAll(store.list());
   await dataSkill.syncAll(store.list());
   const hostedSites = new HostedSiteDesktopService(centralAuth);
+  const billing = new BillingDesktopService(centralAuth, (url) => shell.openExternal(url));
+  const hostedServers = new HostedServerDesktopService(
+    withHostingDeveloperKey(centralAuth, hostingDeveloperKey),
+    (url) => shell.openExternal(url),
+    Date.now,
+    // A new server is running, but the joined list has no entry for it yet: read the list again.
+    (serverId) => {
+      if (!remoteServers.list().some((server) => server.id === serverId)) remoteServers.invalidateDirectory();
+    },
+  );
   const sidebarLayout = new SidebarLayoutStore(join(app.getPath("userData"), SIDEBAR_LAYOUT_FILE));
   await sidebarLayout.initialize();
   const mailbox = new MailboxStore(app.getPath("userData"), store.sharedRoot, store.database);
@@ -900,6 +933,21 @@ export async function createApplicationServices({
       setupCompleted: setupState.completed,
     });
   }
+  // At the same position. A failure leaves the host unconfigured and the app running, so the log
+  // shows why; a throw here would make systemd restart the app with a claim that may be spent.
+  let hostedServerSignedIn = false;
+  const signInHostedServer = async (
+    environment: HostedServerEnvironment,
+    initialization: Promise<CentralAuthState>,
+  ): Promise<void> => {
+    await applyHostedServerAccount({ environment, centralAuth, centralAuthInitialization: initialization, teamStore });
+    hostedServerSignedIn = true;
+  };
+  if (hostedServer) {
+    await signInHostedServer(hostedServer, centralAuthInitialization).catch((error) =>
+      logger.error("The hosted server could not sign in:", toLogValue(error)),
+    );
+  }
   const teamChatStore = new TeamChatStore(store.database);
   const remoteDesktopRuntime = await resolveRemoteDesktopRuntime({
     isPackaged: app.isPackaged,
@@ -919,6 +967,18 @@ export async function createApplicationServices({
     if (!requestedUpdate) throw new RequestedUpdateRefusal("unsupported");
     return requestedUpdate;
   };
+  // Imported channels are created by the local user, as when they create one by hand. A member who
+  // imports from a joined client is named by the route instead. The host is read only on apply.
+  const agentImport = new AgentImportService(
+    service,
+    {
+      library: () => skills.requireLocalLibrary(),
+      installLocal: (input) => skills.installLocal(input),
+    },
+    () => host.channelActor(),
+    undefined,
+    join(app.getPath("userData"), "agent-import-uploads"),
+  );
   const host = new HostService({
     appVersion: app.getVersion(),
     store: teamStore,
@@ -933,6 +993,8 @@ export async function createApplicationServices({
     mcpServers: service,
     // Present, so the host advertises `storage-v1`. Members read; only admins delete or clear.
     storage: storageUsage,
+    // Present, so the host advertises `agent-import-v1`. Any member can import.
+    agentImport,
     // Each member present advertises its admin capability. Every admin route requires an owner or admin.
     admin: {
       agents: agentAdminSettings,
@@ -964,6 +1026,7 @@ export async function createApplicationServices({
     teamWebRtcBridge,
     registerRemoteHost: (input) => centralAuth.registerRemoteHost(input),
     issueRemoteHostTicket: (hostId) => centralAuth.issueRemoteHostTicket(hostId),
+    sendLiveActivityPush: (hostId, push) => centralAuth.sendLiveActivityPush(hostId, push),
     verifyRemoteSessionTicket: (ticket) => centralAuth.verifyRemoteSessionTicket(ticket),
     endRemoteSession: (sessionId) => centralAuth.endRemoteSession(sessionId),
     remoteControlPlaneUrl: centralAuth.resolveApiUrl("/"),
@@ -1023,15 +1086,6 @@ export async function createApplicationServices({
       return Promise.resolve(iceServers);
     },
   });
-  // Imported channels are created by the local user, as when they create one by hand.
-  const agentImport = new AgentImportService(
-    service,
-    {
-      library: () => skills.requireLocalLibrary(),
-      installLocal: (input) => skills.installLocal(input),
-    },
-    () => host.channelActor(),
-  );
   teardown.push(TEARDOWN_ORDER.host, "the local host", () => host.shutdown());
   const signedInState = centralAuth.getState();
   if (signedInState.status === "signed_in") {
@@ -1048,6 +1102,16 @@ export async function createApplicationServices({
   if (analyticsPlatform !== "darwin" && analyticsPlatform !== "win32" && analyticsPlatform !== "linux") {
     throw new Error(`Unsupported analytics platform: ${analyticsPlatform}`);
   }
+  // The catalog is read in the background. Until it is ready, a tool step reports its server as
+  // custom; the inventory waits for it, because it is sent only once a day.
+  let catalogPluginServers: CatalogPluginServer[] = [];
+  const catalogPluginServersLoaded = loadCatalogPluginServers(
+    app.isPackaged
+      ? join(process.resourcesPath, "plugin-catalog")
+      : resolve(__dirname, "../../resources/plugin-catalog"),
+  ).then((servers) => {
+    catalogPluginServers = servers;
+  });
   const analytics = new HostAnalytics({
     enabled: app.isPackaged && appVariant === "production",
     trackingEnabled: analyticsPreference.enabled,
@@ -1066,6 +1130,31 @@ export async function createApplicationServices({
         : null;
     },
     resolveAgent: (agentId) => service.listAgents().find((agent) => agent.id === agentId) ?? null,
+    resolveMcpServer: (name) => {
+      const configs = service.listMcpServers().filter((server) => isReportedMcpServerName(server.name, name));
+      if (configs.length === 0) return null;
+      const slugs = new Set(configs.map((config) => catalogPluginSlug(config, catalogPluginServers, homedir())));
+      const [slug] = slugs;
+      return { slug: slugs.size === 1 && slug ? slug : null };
+    },
+    resolveRoutineRun: (agentId, routineId, runId) => {
+      const run = service.listRoutineRuns({ agentId, routineId }).find((item) => item.id === runId);
+      const routine = service.listRoutines(agentId).find((item) => item.id === routineId);
+      return run && routine ? { runKind: run.kind, triggerType: routine.trigger.schedule.kind } : null;
+    },
+    resolveInventory: async () => {
+      await catalogPluginServersLoaded;
+      return collectAnalyticsInventory({
+        agents: () => service.listAgents(),
+        routines: (agentId) => service.listRoutines(agentId),
+        // The local read: `listInstalled` asks the marketplace for each skill's latest version.
+        skills: (agentId) => skills.listInstalledForChatTags(agentId),
+        mcpServers: () => service.listMcpServers(),
+        pluginSlug: (config) => catalogPluginSlug(config, catalogPluginServers, homedir()),
+        computerUseEnabled: () => cuaDriver.mcpServerForProviders() !== null,
+      });
+    },
+    inventoryDay: analyticsInventoryDayStore(join(app.getPath("userData"), ANALYTICS_INVENTORY_FILE)),
   });
   // Immediately after construction: this attributes buffered events to the current owner rather
   // than flushing a queue, so a later call would attribute them to nobody.
@@ -1084,6 +1173,7 @@ export async function createApplicationServices({
       allowLocalDevelopmentInvites: developmentRemoteRole !== null,
       appVersion: app.getVersion(),
       getLocalHostId: () => teamStore.getIdentity()?.serverId ?? null,
+      onHostUnavailable: (serverId) => void hostedServers.wakeUnavailableHost(serverId),
       webrtcTransport: new TeamWebRtcClientTransport({
         bridge: teamWebRtcBridge,
         listHosts: () => centralAuth.listRemoteHosts(),
@@ -1263,6 +1353,45 @@ export async function createApplicationServices({
   });
   const remoteUpdate = requestedUpdate;
   teardown.push(TEARDOWN_ORDER.requestedUpdate, "the requested update", () => remoteUpdate.dispose());
+  if (hostedServer) {
+    const hostedServerStartRetry = new HostedServerStartRetry({
+      hostPhase: () => host.getStatus().phase,
+      startHost: async () => {
+        // A start with no answer from the account server ends in the auth error state, and only a
+        // retry reads the stored session again.
+        if (centralAuth.getState().status !== "signed_in") await centralAuth.retry();
+        if (!hostedServerSignedIn) await signInHostedServer(hostedServer, Promise.resolve(centralAuth.getState()));
+        return host.start();
+      },
+      onError: (message, error) => logger.warn(message, toLogValue(error)),
+    });
+    hostedServerStartRetry.start();
+    teardown.push(TEARDOWN_ORDER.hostedServerStartRetry, "the hosted server start retry", () =>
+      hostedServerStartRetry.stop(),
+    );
+    const hostedServerActivity = new HostedServerActivity({
+      hostId: hostedServer.hostId,
+      inUse: () =>
+        service.hasActiveWork().length > 0 ||
+        host.describeRestartBlockers().length > 0 ||
+        (host.connectedClientCount() > 0 && Date.now() - (host.lastClientRequestAt() ?? 0) < CLIENT_USE_WINDOW_MS),
+      nextRunAt: () => {
+        const dueAt = service.nextRoutineDueAt();
+        return dueAt ? Date.parse(dueAt) : null;
+      },
+      report: async (path, report) =>
+        centralAuth.requestAuthorized(
+          path,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(report) },
+          () => undefined,
+        ),
+      onError: (message, error) => logger.warn(message, toLogValue(error)),
+    });
+    hostedServerActivity.start();
+    teardown.push(TEARDOWN_ORDER.hostedServerActivity, "the hosted server activity report", () =>
+      hostedServerActivity.stop(),
+    );
+  }
   await hostUpdateCoordinator.tick();
   hostUpdateCoordinator.start();
   teardown.push(TEARDOWN_ORDER.hostUpdateCoordinator, "the host update coordinator", () =>
@@ -1299,6 +1428,8 @@ export async function createApplicationServices({
     centralAuth,
     skills,
     hostedSites,
+    billing,
+    hostedServers,
     customProviders,
     customProviderChanges,
     customAgentChanges,
