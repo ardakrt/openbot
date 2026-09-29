@@ -285,22 +285,14 @@ const windows = createMainWindowController({
   reportError: (message, error) => logger.error(message, toLogValue(error)),
 });
 
-/**
- * Outside macOS, closing the main window ends OpenBot.
- *
- * `window-all-closed` cannot carry that on its own any more. The Computer Use overlays are built
- * once and then hidden between actions rather than closed, and a hidden window is still a window,
- * so the event never arrives: the user would close the last window they can see and leave OpenBot
- * and the driver running with no way back to them.
- */
+let appIconColorImage: NativeImage | undefined;
+
 /**
  * Shows the chosen logo color on the Dock icon, or on each window icon where there is no Dock. A dev
  * or preview build keeps the icon of its build, so it is not mistaken for the release. macOS has no
  * alternate app icon API, so when the app is closed the Dock shows the icon inside the app bundle:
  * changing that file would break the code signature.
  */
-let appIconColorImage: NativeImage | undefined;
-
 function applyAppIconColor(color: AppLogoColor): void {
   if (appVariant !== "production") return;
   const icon = nativeImage.createFromPath(
@@ -325,6 +317,14 @@ function applyAppIconColor(color: AppLogoColor): void {
   for (const window of BrowserWindow.getAllWindows()) window.setIcon(icon);
 }
 
+/**
+ * Outside macOS, closing the main window ends OpenBot.
+ *
+ * `window-all-closed` cannot carry that on its own any more. The Computer Use overlays are built
+ * once and then hidden between actions rather than closed, and a hidden window is still a window,
+ * so the event never arrives: the user would close the last window they can see and leave OpenBot
+ * and the driver running with no way back to them.
+ */
 function attachQuitOnMainWindowClose(window: BrowserWindow): void {
   if (process.platform === "darwin") return;
   window.on("closed", () => {

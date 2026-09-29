@@ -7,10 +7,7 @@ import {
 import { createSignal, onSettled } from "solid-js";
 import { appPort } from "./app-port";
 
-/**
- * Sets the release logo color in this window. Only `--openbot-logo-production` changes, so a dev or
- * preview logo keeps the color of its build, as the Dock icon does.
- */
+/** Sets the release logo color and its eye color in this window. */
 function applyLogoColor(color: AppLogoColor): void {
   document.documentElement.style.setProperty("--openbot-logo-production", APP_LOGO_COLOR_HEX[color]);
   document.documentElement.style.setProperty("--openbot-logo-production-eye", APP_LOGO_EYE_HEX[color]);
@@ -18,18 +15,27 @@ function applyLogoColor(color: AppLogoColor): void {
 
 /**
  * Keeps this window on the saved logo color. Every window runs it, the Dynamic Island too, because
- * the island has no Settings of its own and main broadcasts each change to every window. The preview
- * calls the returned function when it unmounts, so the next story starts from the brand tokens.
+ * the island has no Settings of its own and main broadcasts each change to every window. Only a
+ * release build applies it: some logos draw the release variant in every build, and a dev or preview
+ * build keeps its own color. The preview calls the returned function when it unmounts, so the next
+ * story starts from the brand tokens.
  */
 export function syncLogoColor(): () => void {
   let active = true;
+  const release = appPort()
+    .getAppInfo()
+    .then((info) => info.variant === "production")
+    .catch(() => false);
+  const apply = (color: AppLogoColor) => {
+    void release.then((isRelease) => {
+      if (active && isRelease) applyLogoColor(color);
+    });
+  };
   void appPort()
     .getAppLogoColorPreference()
-    .then((preference) => {
-      if (active) applyLogoColor(preference.color);
-    })
+    .then((preference) => apply(preference.color))
     .catch(() => undefined);
-  const unsubscribe = appPort().onAppLogoColorPreference((preference) => applyLogoColor(preference.color));
+  const unsubscribe = appPort().onAppLogoColorPreference((preference) => apply(preference.color));
   return () => {
     active = false;
     unsubscribe();
