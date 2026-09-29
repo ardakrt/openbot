@@ -92,6 +92,7 @@ import { HostService } from "./host-service";
 import { HostUpdateCoordinator } from "./host-update-coordinator";
 import { HostedSiteDesktopService } from "./hosted-site-service";
 import { LanguageService } from "./language-service";
+import { LogoColorService } from "./logo-color-service";
 import type { MacHapticFeedback } from "./mac-haptic-feedback";
 import {
   computerUseDisplays,
@@ -153,6 +154,7 @@ const ANALYTICS_PREFERENCE_FILE = "openbot-analytics-preference-v1.json";
 const APPROVAL_AUTOMATION_FILE = "openbot-approval-automation-v2.json";
 const LEGACY_APPROVAL_AUTOMATION_FILE = "openbot-approval-automation-v1.json";
 const LANGUAGE_PREFERENCE_FILE = "openbot-language-preference-v1.json";
+const LOGO_COLOR_PREFERENCE_FILE = "openbot-logo-color-preference-v1.json";
 const UPDATE_PREFERENCE_FILE = "openbot-update-preference-v1.json";
 const NOTIFICATION_PREFERENCE_FILE = "openbot-notification-preference-v1.json";
 const DYNAMIC_ISLAND_PREFERENCE_FILE = "openbot-dynamic-island-preference-v1.json";
@@ -253,6 +255,7 @@ export interface ApplicationServices {
   approvalAutomation: ApprovalAutomation;
   agentAdminSettings: AgentAdminSettingsService;
   language: LanguageService;
+  logoColor: LogoColorService;
   notificationPreference: NotificationPreferenceStore;
   agentInitialization: AgentInitializationGate;
   sidebarLayout: SidebarLayoutStore;
@@ -470,6 +473,8 @@ export async function createApplicationServices({
     systemLocale: app.getLocale(),
   });
   await language.load();
+  const logoColor = new LogoColorService({ path: join(app.getPath("userData"), LOGO_COLOR_PREFERENCE_FILE) });
+  await logoColor.load();
   const notificationPreference = new NotificationPreferenceStore(
     join(app.getPath("userData"), NOTIFICATION_PREFERENCE_FILE),
   );
@@ -1281,6 +1286,7 @@ export async function createApplicationServices({
     approvalAutomation,
     agentAdminSettings,
     language,
+    logoColor,
     notificationPreference,
     agentInitialization,
     hostUpdateCoordinator,

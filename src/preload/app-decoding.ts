@@ -11,6 +11,7 @@ import {
   type AnalyticsPreference,
   type AppInfo,
   type AppLanguagePreference,
+  type AppLogoColorPreference,
   type ApprovalAutomationPreference,
   type AppSetupState,
   type CentralAuthIssue,
@@ -30,6 +31,7 @@ import {
   isAgentModel,
   isAgentProvider,
   isAppLanguage,
+  isAppLogoColor,
   isApprovalAutomationPreference,
   isCustomAgentCheckResult,
   isCustomAgentResult,
@@ -98,6 +100,12 @@ export function decodeAppLanguagePreference(value: unknown): AppLanguagePreferen
   const preference = decodeRecord(value, "language preference");
   if (!isAppLanguage(preference.language)) throw new Error("Invalid language.");
   return { language: preference.language };
+}
+
+export function decodeAppLogoColorPreference(value: unknown): AppLogoColorPreference {
+  const preference = decodeRecord(value, "logo color preference");
+  if (!isAppLogoColor(preference.color)) throw new Error("Invalid logo color.");
+  return { color: preference.color };
 }
 
 export function decodeCentralAuthState(value: unknown): CentralAuthState {

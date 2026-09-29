@@ -7,6 +7,7 @@ import { ComputerUseHighlightSurface } from "./features/computer-use/ComputerUse
 import { ComputerUsePermissionHelp, permissionFromQuery } from "./features/computer-use/ComputerUsePermissionHelp";
 import { DynamicIslandSurface } from "./features/dynamic-island/DynamicIslandSurface";
 import { I18nProvider } from "./i18n-context";
+import { syncLogoColor } from "./logo-color";
 import "./styles.css";
 
 const root = document.getElementById("root");
@@ -16,6 +17,7 @@ if (!root) {
 }
 
 installPointerFocusGuard();
+syncLogoColor();
 
 const surface = new URLSearchParams(window.location.search).get("surface");
 // The helper windows are not inside `App`, so each gets the language setting of its own. They use

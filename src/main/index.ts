@@ -1,11 +1,23 @@
 import { join, resolve } from "node:path";
 import { parseInviteUrl } from "@openbot/contracts/invite-links";
-import { type CentralAuthState, IPC_ENDPOINTS } from "@openbot/contracts/ipc";
+import { type AppLogoColor, type CentralAuthState, IPC_ENDPOINTS } from "@openbot/contracts/ipc";
 import { resolveLocale, translateFor } from "@openbot/i18n";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { createRemoteDirectoryRefresh } from "@openbot/team-client/remote-directory";
-import { app, BrowserWindow, dialog, Notification, net, powerMonitor, protocol, screen, shell } from "electron";
-import { readAppVariant, resolveAppIconPath } from "./app-icon";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  type NativeImage,
+  Notification,
+  nativeImage,
+  net,
+  powerMonitor,
+  protocol,
+  screen,
+  shell,
+} from "electron";
+import { readAppVariant, resolveAppIconPath, resolveLogoColorIconPath } from "./app-icon";
 import { type ApplicationServices, createApplicationServices } from "./application-services";
 import { type DeepLink, findDeepLink, parseDeepLink } from "./deep-link-router";
 import { requestNotificationPermission, showRetainedNotification } from "./desktop-notifications";
@@ -281,6 +293,38 @@ const windows = createMainWindowController({
  * so the event never arrives: the user would close the last window they can see and leave OpenBot
  * and the driver running with no way back to them.
  */
+/**
+ * Shows the chosen logo color on the Dock icon, or on each window icon where there is no Dock. A dev
+ * or preview build keeps the icon of its build, so it is not mistaken for the release. macOS has no
+ * alternate app icon API, so when the app is closed the Dock shows the icon inside the app bundle:
+ * changing that file would break the code signature.
+ */
+let appIconColorImage: NativeImage | undefined;
+
+function applyAppIconColor(color: AppLogoColor): void {
+  if (appVariant !== "production") return;
+  const icon = nativeImage.createFromPath(
+    resolveLogoColorIconPath({
+      color,
+      platform: process.platform,
+      isPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+      sourceRoot: resolve(__dirname, "../.."),
+    }),
+  );
+  if (icon.isEmpty()) return;
+  if (process.platform === "darwin") {
+    app.dock?.setIcon(icon);
+    return;
+  }
+  // A window takes `appIconPath` when it is created, so a window opened after the choice gets the
+  // chosen icon here.
+  if (!appIconColorImage)
+    app.on("browser-window-created", (_event, window) => window.setIcon(appIconColorImage ?? icon));
+  appIconColorImage = icon;
+  for (const window of BrowserWindow.getAllWindows()) window.setIcon(icon);
+}
+
 function attachQuitOnMainWindowClose(window: BrowserWindow): void {
   if (process.platform === "darwin") return;
   window.on("closed", () => {
@@ -346,6 +390,7 @@ function registerIpcHandlers({
   approvalAutomation,
   agentAdminSettings,
   language,
+  logoColor,
   notificationPreference,
   agentInitialization,
   sidebarLayout,
@@ -387,6 +432,7 @@ function registerIpcHandlers({
       analyticsPreferenceFile,
       approvalAutomation,
       language,
+      logoColor,
       initializeAgent: () => agentInitialization.start(),
       appVariant,
       getMainWindow,
@@ -739,6 +785,7 @@ if (!hasSingleInstanceLock) {
         dynamicIsland,
         teamStore,
         language,
+        logoColor,
         trace,
       } = built;
 
@@ -786,6 +833,13 @@ if (!hasSingleInstanceLock) {
         configureApplicationMenu(service, updater, language.translate);
         for (const window of BrowserWindow.getAllWindows()) {
           sendToRenderer(window, IPC_ENDPOINTS.app.appLanguagePreference, preference);
+        }
+      });
+      applyAppIconColor(logoColor.preference.color);
+      logoColor.subscribe((preference) => {
+        applyAppIconColor(preference.color);
+        for (const window of BrowserWindow.getAllWindows()) {
+          sendToRenderer(window, IPC_ENDPOINTS.app.appLogoColorPreference, preference);
         }
       });
       await dynamicIsland

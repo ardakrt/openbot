@@ -11,6 +11,7 @@ import type { MailboxStore } from "../../backend/mailbox-store";
 import { readAnalyticsPreference, writeAnalyticsPreference } from "../analytics-preference-store";
 import type { ApprovalAutomation } from "../approval-automation-store";
 import type { LanguageService } from "../language-service";
+import type { LogoColorService } from "../logo-color-service";
 import { MAC_PERMISSION_URLS } from "../mac-permission-urls";
 import { exportDiagnostics, exportOpenBotData } from "../maintenance-service";
 import { readSetupState, writeSetupState } from "../setup-store";
@@ -18,6 +19,7 @@ import type { UpdateService } from "../update-service";
 import {
   parseAnalyticsPreference,
   parseAppLanguagePreference,
+  parseAppLogoColorPreference,
   parseApprovalAutomation,
   parseExternalDestination,
   parseSetup,
@@ -57,6 +59,7 @@ export interface AppIpcDependencies {
   analyticsPreferenceFile: string;
   approvalAutomation: ApprovalAutomation;
   language: LanguageService;
+  logoColor: LogoColorService;
   initializeAgent: () => Promise<void>;
   appVariant: AppVariant;
   getMainWindow: () => BrowserWindow | null;
@@ -73,6 +76,7 @@ export function appIpcHandlers({
   analyticsPreferenceFile,
   approvalAutomation,
   language,
+  logoColor,
   initializeAgent,
   appVariant,
   getMainWindow,
@@ -105,6 +109,8 @@ export function appIpcHandlers({
       setApprovalAutomation: payloadHandler(parseApprovalAutomation, (parsed) => approvalAutomation.set(parsed)),
       getAppLanguagePreference: handler(() => language.preference),
       setAppLanguagePreference: payloadHandler(parseAppLanguagePreference, (parsed) => language.set(parsed)),
+      getAppLogoColorPreference: handler(() => logoColor.preference),
+      setAppLogoColorPreference: payloadHandler(parseAppLogoColorPreference, (parsed) => logoColor.set(parsed)),
       saveSetup: payloadHandler(parseSetup, async (input): Promise<AppSetupState> => {
         const state = await writeSetupState(setupFile, input);
         await service.setPreferredProvider(input.preferredProvider, input.preferredModel);
