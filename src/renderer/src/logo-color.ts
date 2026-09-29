@@ -18,14 +18,24 @@ function applyLogoColor(color: AppLogoColor): void {
 
 /**
  * Keeps this window on the saved logo color. Every window runs it, the Dynamic Island too, because
- * the island has no Settings of its own and main broadcasts each change to every window.
+ * the island has no Settings of its own and main broadcasts each change to every window. The preview
+ * calls the returned function when it unmounts, so the next story starts from the brand tokens.
  */
-export function syncLogoColor(): void {
+export function syncLogoColor(): () => void {
+  let active = true;
   void appPort()
     .getAppLogoColorPreference()
-    .then((preference) => applyLogoColor(preference.color))
+    .then((preference) => {
+      if (active) applyLogoColor(preference.color);
+    })
     .catch(() => undefined);
-  appPort().onAppLogoColorPreference((preference) => applyLogoColor(preference.color));
+  const unsubscribe = appPort().onAppLogoColorPreference((preference) => applyLogoColor(preference.color));
+  return () => {
+    active = false;
+    unsubscribe();
+    document.documentElement.style.removeProperty("--openbot-logo-production");
+    document.documentElement.style.removeProperty("--openbot-logo-production-eye");
+  };
 }
 
 /** The Settings control state. Set optimistically, and reverted if main refuses the write. */
