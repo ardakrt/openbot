@@ -302,18 +302,21 @@ at most 10 named snapshots for each account.
 The Linux build contains `scripts/hosting/` (without the TypeScript files) in `resources/hosting`.
 On a server, root runs `openbot-hosted-update`:
 
-1. `openbot-update.timer` runs `stage` 5 minutes after each start of the timer and then each 6
-   hours. It reads the `latest-linux.yml` of the latest GitHub release, the manifest that the Linux
-   desktop updater reads. When that version is newer than the installed one, it downloads the
-   AppImage, checks its SHA-512 against the manifest, unpacks it in `/var/tmp`, installs the
-   packages in the `packages.txt` of that release, and copies it to `/opt/OpenBot/staged`.
+1. `openbot-update.timer` runs `stage` 5 to 10 minutes after each start of the timer and then
+   about each 6 hours. It reads the `latest-linux.yml` (`latest-linux-arm64.yml` on arm64) of the
+   latest GitHub release, the manifest that the Linux desktop updater reads. When that version is newer than the installed one, it downloads the
+   AppImage, checks its SHA-512 against the manifest, unpacks it in `/var/tmp`, checks that it has
+   all hosting files, installs the packages in the `packages.txt` of that release, and copies it
+   to `/opt/OpenBot/staged`.
    `staged.ready` comes after the last file. OpenBot keeps running. The download and unpack use
    idle CPU and disk priority.
 2. `openbot-update-apply.service` runs `apply` at boot, before `openbot.service`. boat stop and resume
    work like a reboot, so the new release starts at the next wake of the server, not during use. It
    copies `staged` to `app`, and then installs the scripts, AppArmor profile and units of the new
-   release. A stop during the copy leaves `.applying`, and the next boot copies again. A failure
-   does not stop OpenBot: it starts the release that is in place.
+   release. `.applying` and `staged` stay until all of this is complete, so after a stop or a
+   failure the next boot does it again, and `stage` does nothing until then. `openbot.service`
+   does not require `apply`, so it starts after a failure too: with the old release, or with a
+   partial copy after a failed copy, until the next boot.
 
 boat saves `/opt` by the paths that change, and it does not look into a directory that a rename
 moves. After the next stop, such a directory is empty or has its old files. So a release gets to
@@ -321,14 +324,18 @@ moves. After the next stop, such a directory is empty or has its old files. So a
 with a probe; not in boat documentation.]
 
 boat resumes a server on a machine that booted before, restores the disk lazily, and starts the
-units before the restore ends. Both commands wait until the restore ends (at most 4 minutes).
+units before the restore ends. `stage` waits until the restore ends (at most 4 minutes). `apply`
+waits only when it finds `staged.ready` or `.applying`, because OpenBot starts after it. When the
+restore does not show a staged release yet, the release applies at the next boot.
 [Not confirmed in boat documentation: the `active` and `hydration-done` files in
 `/var/lib/ascii-lazy` that mark the restore. Observed on a boat VM.] `apply` never removes a staged
 release that is not complete.
 
 A server only moves to a newer version: an older OpenBot cannot open a database that a newer one
-migrated. A staged release that is no longer the latest one, for example a withdrawn release, is
-removed and does not apply. A release without `resources/hosting` cannot update a server.
+migrated. `stage` stops when it cannot read the installed version, and `provision.sh` stops when the
+installed version is newer. A staged release that is no longer the latest one, for example a
+withdrawn release, is removed at the next `stage` run. A server that starts before that run applies
+it. A release without all of its `resources/hosting` files cannot update a server.
 
 A server that has no updater, such as one made from a template before 0.25.3 [not confirmed: the
 first release with this change], needs one upgrade by hand. With a boat key that has command and

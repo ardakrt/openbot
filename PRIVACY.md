@@ -221,7 +221,8 @@ team data, the same as your own computer would. The server stops 15 to 20 minute
 starts again when you connect, or a few minutes before its next scheduled routine run. When boat stops the sandbox, boat keeps a snapshot of its disk until
 the server starts again. Deleting the server
 deletes the sandbox. A hosted server updates itself: it downloads the newest release from GitHub
-Releases, as an installed build does, and starts it at its next start.
+Releases, as an installed build does, installs the Ubuntu packages that the release needs from the
+Ubuntu package servers, and starts it at its next start.
 
 For each hosted server, the account service stores the owner, name, size and the size of a pending
 plan change, the plan, billing interval and currency, the open Stripe Checkout session ID, desired

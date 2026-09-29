@@ -22,9 +22,23 @@ fetch() {
   fi
 }
 install_packages() { echo "$1" >>"$ROOT/packages"; }
-install_hosting() { echo "$1" >>"$ROOT/hosting"; }
+install_hosting() {
+  if [ -e "$ROOT/fail-hosting" ]; then return 1; fi
+  echo "$1" >>"$ROOT/hosting"
+}
 "$@"
 `;
+
+const HOSTING_FILES = [
+  "openbot-hosted.apparmor",
+  "openbot-hosted-server",
+  "openbot-hosted-env",
+  "openbot-hosted-update",
+  "openbot.service",
+  "openbot-update.service",
+  "openbot-update.timer",
+  "openbot-update-apply.service",
+].join(" ");
 
 let root: string;
 
@@ -68,6 +82,7 @@ function publish(version: string, options: { hosting?: boolean; manifestFor?: st
     "printf '#!/bin/sh\\n' >squashfs-root/openbot && chmod 0755 squashfs-root/openbot",
     ": >squashfs-root/chrome-sandbox",
     hosting ? "mkdir squashfs-root/resources/hosting && echo curl >squashfs-root/resources/hosting/packages.txt" : "",
+    hosting ? `(cd squashfs-root/resources/hosting && touch ${HOSTING_FILES})` : "",
     "",
   ].join("\n");
   const name = `OpenBot-${version}-x86_64.AppImage`;
@@ -158,11 +173,20 @@ describe("openbot-hosted-update", () => {
     expect(versionOf("app")).toBe("0.25.3");
   });
 
-  it("copies the release again after a stop during the copy into place", () => {
+  it("copies the release again after a stop or a failure during the move into place", () => {
     stageRelease("0.25.3");
     installRelease("app", "0.25.3");
     rmSync(join(root, "opt", "app", "openbot"));
     writeFileSync(join(root, "opt", ".applying"), "");
+    // A check keeps the only complete copy, also when the latest release is another one.
+    publish("0.25.4");
+    expect(run("stage").status).toBe(0);
+    expect(versionOf("staged")).toBe("0.25.3");
+
+    writeFileSync(join(root, "fail-hosting"), "");
+    expect(run("apply").status).not.toBe(0);
+    expect(existsSync(join(root, "opt", ".applying"))).toBe(true);
+    rmSync(join(root, "fail-hosting"));
     expect(run("apply").status).toBe(0);
     expect(existsSync(join(root, "opt", "app", "openbot"))).toBe(true);
     expect(readdirSync(join(root, "opt"))).toEqual(["app"]);

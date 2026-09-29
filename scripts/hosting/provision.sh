@@ -39,11 +39,17 @@ fetch --output "$work/OpenBot.AppImage" "$APPIMAGE_URL"
 echo "$APPIMAGE_SHA256  $work/OpenBot.AppImage" | sha256sum --check --quiet
 unpack "$work/OpenBot.AppImage"
 prepare_release "$work/squashfs-root"
+# An older OpenBot cannot open a database that a newer one migrated.
+installed=$(version_of "$INSTALL/app")
+if [ -n "$installed" ] && newer "$installed" "$(version_of "$work/squashfs-root")"; then
+  fail "OpenBot $installed is installed, and this AppImage has an older version."
+fi
 stage_release "$work/squashfs-root"
 swap_in
 printf '%s\n' "$SERVICE_USER" >"$INSTALL/hosted/service-user"
 chmod 0644 "$INSTALL/hosted/service-user"
 install_hosting "$SOURCE"
+finish_swap
 
 # The server keyring. boat keeps changes in /srv, and /srv is on the disk while /home is still on
 # the restore mount after a resume. openbot-hosted-server explains why that matters.

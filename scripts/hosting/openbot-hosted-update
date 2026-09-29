@@ -24,6 +24,8 @@ SCRATCH=/var/tmp
 RESTORE=/var/lib/ascii-lazy
 HOSTED_FILES=(openbot-hosted-server openbot-hosted-env openbot-hosted-update)
 UNITS=(openbot.service openbot-update.service openbot-update.timer openbot-update-apply.service)
+# All that `install_hosting` reads from a release.
+RELEASE_FILES=(packages.txt openbot-hosted.apparmor "${HOSTED_FILES[@]}" "${UNITS[@]}")
 
 fail() {
   echo "$*" >&2
@@ -81,6 +83,8 @@ install_packages() {
     dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null | grep -qx installed || missing+=("$package")
   done <"$1"
   [ "${#missing[@]}" -eq 0 ] && return 0
+  # boat keeps the dpkg state, so an install that a stop interrupted must end first.
+  dpkg --configure -a
   apt-get -o DPkg::Lock::Timeout=600 update
   apt-get -o DPkg::Lock::Timeout=600 install -y --no-install-recommends "${missing[@]}"
   apt-get clean
@@ -113,11 +117,15 @@ copy_release() {
   cp -a "$1" "$2"
 }
 
-# Copies the staged release into place. A stop during the copy leaves `.applying`, and `apply` copies
-# again at the next boot. `staged` stays until the copy is complete.
+# Copies the staged release into place. `.applying` and `staged` stay until `finish_swap`, after the
+# hosting files of the release are installed. A stop or a failure before then leaves `.applying`, and
+# `apply` does all of it again at the next boot.
 swap_in() {
   : >"$INSTALL/.applying"
   copy_release "$INSTALL/staged" "$INSTALL/app"
+}
+
+finish_swap() {
   rm -f "$INSTALL/.applying"
   rm -rf "$INSTALL/staged" "$INSTALL/staged.ready"
 }
@@ -165,6 +173,11 @@ stage() {
     aarch64) architecture=arm64 manifest=latest-linux-arm64.yml ;;
     *) fail "OpenBot has no release for this machine." ;;
   esac
+  # `apply` did not complete its copy. A new stage could remove the only complete copy.
+  if [ -e "$INSTALL/.applying" ]; then
+    echo "The last update is not complete. It completes at the next start of the server." >&2
+    return 0
+  fi
   [ -x "$INSTALL/app/openbot" ] || fail "OpenBot is not installed."
   manifest=$(fetch "$RELEASES/latest/download/$manifest")
   version=$(sed -n 's/^version: *//p' <<<"$manifest" | head -n 1)
@@ -173,10 +186,12 @@ stage() {
   [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "The release manifest has no valid version."
   [ "$path" = "OpenBot-$version-$architecture.AppImage" ] || fail "The release manifest names another file."
   [[ $sha512 =~ ^[A-Za-z0-9+/]{86}==$ ]] || fail "The release manifest has no valid SHA-512."
-  # A release that is no longer the latest one, for example because it was withdrawn, does not apply.
-  # This also removes a copy that a stop interrupted.
+  # A release that is no longer the latest one, for example because it was withdrawn, is removed. A
+  # server that starts before this check applies it. This also removes a copy that a stop interrupted.
   if [ "$(staged_version)" != "$version" ]; then rm -rf "$INSTALL/staged" "$INSTALL/staged.ready"; fi
   current=$(version_of "$INSTALL/app")
+  # With an unknown version, each release looks newer, and an update could be a downgrade.
+  [ -n "$current" ] || fail "The installed version is not known."
   newer "$version" "$current" || return 0
   [ -d "$INSTALL/staged" ] && return 0
   echo "Staging OpenBot $version (installed: ${current:-unknown})."
@@ -189,7 +204,10 @@ stage() {
   unpack "$work/OpenBot.AppImage"
   [ "$(version_of "$work/squashfs-root")" = "$version" ] || fail "The AppImage has another version."
   # The release names its own packages and units. A release without them cannot update a server.
-  [ -f "$work/squashfs-root/resources/hosting/packages.txt" ] || fail "The release has no hosting files."
+  local file
+  for file in "${RELEASE_FILES[@]}"; do
+    [ -f "$work/squashfs-root/resources/hosting/$file" ] || fail "The release has no hosting files."
+  done
   prepare_release "$work/squashfs-root"
   install_packages "$work/squashfs-root/resources/hosting/packages.txt"
   stage_release "$work/squashfs-root"
@@ -212,14 +230,21 @@ apply() {
     return 0
   fi
   swap_in
-  echo "Updated OpenBot from ${current:-unknown} to $staged."
   install_hosting "$INSTALL/app/resources/hosting"
+  finish_swap
+  echo "Updated OpenBot from ${current:-unknown} to $staged."
 }
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   [ "$(id -u)" -eq 0 ] || fail "Run this as root."
   exec 9>"$LOCK"
   flock 9
+  # openbot.service waits for `apply`, so `apply` waits for the restore only when it has work. A staged
+  # release that the restore does not show yet applies at the next boot.
+  if [ "${1:-}" = apply ] && [ ! -e "$INSTALL/staged.ready" ] && [ ! -e "$INSTALL/.applying" ]; then
+    recover
+    exit 0
+  fi
   wait_for_restore
   case ${1:-} in
     stage) stage ;;

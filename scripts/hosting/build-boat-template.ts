@@ -91,7 +91,9 @@ async function main(): Promise<void> {
         "test -x /opt/OpenBot/app/openbot",
         "systemctl is-enabled --quiet openbot.service",
         "! systemctl is-active --quiet openbot.service",
-        "systemctl is-enabled --quiet openbot-update.timer openbot-update-apply.service",
+        // With more than one unit, `is-enabled` passes when one of them is enabled.
+        "systemctl is-enabled --quiet openbot-update.timer",
+        "systemctl is-enabled --quiet openbot-update-apply.service",
         "! systemctl is-active --quiet openbot-update.timer",
         'test ! -e "$HOME/.config/OpenBot"',
         'test ! -e "$HOME/.config/openbot-hosted"',
