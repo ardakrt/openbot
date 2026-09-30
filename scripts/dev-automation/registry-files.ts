@@ -30,10 +30,11 @@ export interface DirectoryOwnership {
 export function assertOwnerOnlyDirectory(
   directory: string,
   stats: DirectoryOwnership,
-  owner = process.getuid?.(),
+  owner?: number,
   platform: NodeJS.Platform = process.platform,
 ): void {
-  if (stats.symbolicLink || (owner !== undefined && stats.uid !== owner)) {
+  const effectiveOwner = owner ?? (platform === "win32" ? undefined : process.getuid?.());
+  if (stats.symbolicLink || (effectiveOwner !== undefined && stats.uid !== effectiveOwner)) {
     throw new Error(
       `${directory} is not owned by this user, so dev instances will not be published there. ` +
         "Remove it and start `bun run dev` again.",
