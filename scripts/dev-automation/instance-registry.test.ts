@@ -269,24 +269,10 @@ describe("assertOwnerOnlyDirectory", () => {
 
   it("refuses a directory other accounts can reach and a symlinked one", () => {
     expect(() =>
-      assertOwnerOnlyDirectory("/tmp/registry", { uid: 501, mode: 0o40777, symbolicLink: false }, 501, "darwin"),
+      assertOwnerOnlyDirectory("/tmp/registry", { uid: 501, mode: 0o40777, symbolicLink: false }, 501),
     ).toThrow("accessible to other accounts");
     expect(() =>
       assertOwnerOnlyDirectory("/tmp/registry", { uid: 501, mode: 0o40700, symbolicLink: true }, 501),
-    ).toThrow("not owned by this user");
-  });
-
-  it("accepts synthesized directory modes on Windows while still rejecting symlinks", () => {
-    expect(() =>
-      assertOwnerOnlyDirectory(
-        "C:\\Temp\\registry",
-        { uid: 0, mode: 0o40666, symbolicLink: false },
-        undefined,
-        "win32",
-      ),
-    ).not.toThrow();
-    expect(() =>
-      assertOwnerOnlyDirectory("C:\\Temp\\registry", { uid: 0, mode: 0o40666, symbolicLink: true }, undefined, "win32"),
     ).toThrow("not owned by this user");
   });
 
@@ -301,7 +287,7 @@ describe("assertOwnerOnlyDirectory", () => {
 
   it("accepts the owner-only directory dev publishes into", () => {
     expect(() =>
-      assertOwnerOnlyDirectory("/tmp/registry", { uid: 501, mode: 0o40700, symbolicLink: false }, 501, "darwin"),
+      assertOwnerOnlyDirectory("/tmp/registry", { uid: 501, mode: 0o40700, symbolicLink: false }, 501),
     ).not.toThrow();
   });
 });

@@ -29,6 +29,7 @@ import {
 } from "./dev-automation/stack-registry";
 import { resolveDevelopmentAppDataRoot } from "./development-state-paths";
 import { withoutElectronRuntimeFlags } from "./electron-spawn-env";
+import { cliSpawnTarget, resolvePackageBin } from "./package-bin";
 import { prepareDevelopmentEnvironment } from "./prepare-dev-environment";
 
 const logger = createOpenBotLogger("dev-services");
@@ -101,17 +102,6 @@ export function servicesForTarget(target: DevelopmentTarget): DevelopmentService
   return ["api", "remote", "app"];
 }
 
-export function resolvePackageBin(root: string, name: string, platform: NodeJS.Platform = process.platform): string {
-  const binDir = join(root, "node_modules", ".bin");
-  if (platform === "win32") {
-    const exe = join(binDir, `${name}.exe`);
-    if (existsSync(exe)) return exe;
-    const cmd = join(binDir, `${name}.cmd`);
-    if (existsSync(cmd)) return cmd;
-  }
-  return join(binDir, name);
-}
-
 export function createDevelopmentServiceSpec(
   name: DevelopmentService,
   environment: NodeJS.ProcessEnv = process.env,
@@ -119,8 +109,10 @@ export function createDevelopmentServiceSpec(
   // The parent shell may run inside an Electron harness with
   // ELECTRON_RUN_AS_NODE=1. Every spec below becomes a spawned child, and the
   // app/test-client children relaunch Electron, so the runtime flags are
-  // stripped once here rather than at each spawn.
   const childEnvironment = withoutElectronRuntimeFlags(environment);
+  if (process.platform === "win32" && !childEnvironment.APPDATA && process.env.APPDATA) {
+    childEnvironment.APPDATA = process.env.APPDATA;
+  }
   if (name === "api") {
     return {
       name,
@@ -516,12 +508,14 @@ async function runDevelopmentServices(specs: DevelopmentServiceSpec[], stack: De
 
   try {
     for (const spec of specs) {
-      const child = spawn(spec.executable, spec.args, {
+      const target = cliSpawnTarget(spec.executable, spec.args);
+      const child = spawn(target.command, target.args, {
         cwd: spec.cwd,
         env: spec.env,
         stdio: "inherit",
         shell: false,
         detached: process.platform !== "win32",
+        windowsVerbatimArguments: target.windowsVerbatimArguments,
       });
       processes.set(spec.name, child);
       if (stack && child.pid) {

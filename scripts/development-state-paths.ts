@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { posix, win32 } from "node:path";
+import { posix } from "node:path";
 
 export function resolveDevelopmentAppDataRoot(
   platform: NodeJS.Platform = process.platform,
@@ -11,8 +11,7 @@ export function resolveDevelopmentAppDataRoot(
   }
 
   if (platform === "win32") {
-    const appData =
-      environment.APPDATA?.trim() || (homeDirectory ? win32.join(homeDirectory, "AppData", "Roaming") : undefined);
+    const appData = environment.APPDATA?.trim();
     if (!appData) {
       throw new Error("APPDATA is not set. OpenBot dev state was not changed.");
     }

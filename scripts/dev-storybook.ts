@@ -19,7 +19,8 @@ import {
   removeDevStackRecord,
   writeDevStackRecord,
 } from "./dev-automation/stack-registry";
-import { findAvailablePort, resolvePackageBin, stopOwnedProcesses } from "./dev-services";
+import { findAvailablePort, stopOwnedProcesses } from "./dev-services";
+import { cliSpawnTarget, resolvePackageBin } from "./package-bin";
 
 const logger = createOpenBotLogger("dev-storybook");
 
@@ -108,11 +109,13 @@ async function main(): Promise<void> {
   // `--exact-port` because the port is already reserved and probed. Letting
   // Storybook walk on its own would put it on a port the registry promised to
   // another worktree, which is the collision this script exists to prevent.
-  const child: ChildProcess = spawn(executable, ["dev", "--port", String(port), "--exact-port", ...passthrough], {
+  const target = cliSpawnTarget(executable, ["dev", "--port", String(port), "--exact-port", ...passthrough]);
+  const child: ChildProcess = spawn(target.command, target.args, {
     cwd: projectRoot,
     stdio: "inherit",
     shell: false,
     detached: process.platform !== "win32",
+    windowsVerbatimArguments: target.windowsVerbatimArguments,
   });
   if (child.pid) {
     stack.processes.push({ name: "storybook", pid: child.pid, startedAt: Date.now() });

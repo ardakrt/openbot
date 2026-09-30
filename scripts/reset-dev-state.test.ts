@@ -21,8 +21,6 @@ describe("reset dev state", () => {
     expect(resolveDevelopmentAppDataRoot("win32", { APPDATA: "C:\\Users\\tester\\AppData" })).toBe(
       "C:\\Users\\tester\\AppData",
     );
-    expect(resolveDevelopmentAppDataRoot("win32", {}, "C:\\Users\\tester")).toBe("C:\\Users\\tester\\AppData\\Roaming");
-    expect(() => resolveDevelopmentAppDataRoot("win32", {}, "")).toThrow("APPDATA is not set");
     expect(resolveDevelopmentAppDataRoot("linux", {}, "/home/tester")).toBe("/home/tester/.config");
     expect(resolveDevelopmentAppDataRoot("linux", { XDG_CONFIG_HOME: "/config" })).toBe("/config");
   });

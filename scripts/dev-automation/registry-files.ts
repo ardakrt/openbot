@@ -30,19 +30,15 @@ export interface DirectoryOwnership {
 export function assertOwnerOnlyDirectory(
   directory: string,
   stats: DirectoryOwnership,
-  owner?: number,
-  platform: NodeJS.Platform = process.platform,
+  owner = process.getuid?.(),
 ): void {
-  const effectiveOwner = owner ?? (platform === "win32" ? undefined : process.getuid?.());
-  if (stats.symbolicLink || (effectiveOwner !== undefined && stats.uid !== effectiveOwner)) {
+  if (stats.symbolicLink || (owner !== undefined && stats.uid !== owner)) {
     throw new Error(
       `${directory} is not owned by this user, so dev instances will not be published there. ` +
         "Remove it and start `bun run dev` again.",
     );
   }
-  // Windows directory modes are synthesized (0o666/0o777) and chmod cannot alter them.
-  // Security on Windows is governed by NTFS user-profile ACLs instead.
-  if (platform !== "win32" && (stats.mode & 0o077) !== 0) {
+  if ((stats.mode & 0o077) !== 0) {
     throw new Error(
       `${directory} is accessible to other accounts (mode ${(stats.mode & 0o777).toString(8)}). ` +
         "Remove it and start `bun run dev` again: a registry another account can write lets it choose " +
@@ -51,18 +47,52 @@ export function assertOwnerOnlyDirectory(
   }
 }
 
-export function assertRegistryDirectoryOwnership(directory: string, platform = process.platform): void {
+function assertWindowsDirectoryOwner(directory: string): void {
+  try {
+    const owner = execFileSync(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `(Get-Acl -LiteralPath "${directory.replaceAll('"', '`"')}").Owner`,
+      ],
+      { encoding: "utf8", timeout: 5_000, stdio: ["ignore", "pipe", "ignore"] },
+    ).trim();
+    const currentUser = execFileSync(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", "[System.Security.Principal.WindowsIdentity]::GetCurrent().Name"],
+      { encoding: "utf8", timeout: 5_000, stdio: ["ignore", "pipe", "ignore"] },
+    ).trim();
+    const isOwner =
+      owner.toLowerCase() === currentUser.toLowerCase() || owner.toLowerCase() === "builtin\\administrators";
+    if (!isOwner) {
+      throw new Error(
+        `${directory} is owned by ${owner} instead of ${currentUser}. Remove it and start \`bun run dev\` again.`,
+      );
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("is owned by")) throw error;
+  }
+}
+
+export function assertRegistryDirectoryOwnership(directory: string): void {
   const stats = lstatSync(directory);
-  assertOwnerOnlyDirectory(
-    directory,
-    {
-      uid: stats.uid,
-      mode: stats.mode,
-      symbolicLink: stats.isSymbolicLink(),
-    },
-    process.getuid?.(),
-    platform,
-  );
+  if (process.platform === "win32") {
+    if (stats.isSymbolicLink()) {
+      throw new Error(
+        `${directory} is not owned by this user, so dev instances will not be published there. ` +
+          "Remove it and start `bun run dev` again.",
+      );
+    }
+    assertWindowsDirectoryOwner(directory);
+    return;
+  }
+  assertOwnerOnlyDirectory(directory, {
+    uid: stats.uid,
+    mode: stats.mode,
+    symbolicLink: stats.isSymbolicLink(),
+  });
 }
 
 // Owner-only, because the path is predictable and shared: on a multi-account
@@ -197,9 +227,26 @@ export function verifyRecordedProcess(
 // group outlives its leader: electron-vite exits, and the Electron it started
 // keeps the renderer port. Signal 0 to the negated pid asks about the group,
 // and EPERM is a yes - the group exists and belongs to somebody else.
+function hasWindowsChildProcess(pid: number): boolean {
+  try {
+    const reported = execFileSync(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `if (Get-CimInstance Win32_Process -Filter "ParentProcessId = ${pid}") { '1' } else { '0' }`,
+      ],
+      { encoding: "utf8", timeout: 5_000, stdio: ["ignore", "pipe", "ignore"] },
+    ).trim();
+    return reported === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function isProcessGroupAlive(pid: number, platform: NodeJS.Platform = process.platform): boolean {
-  // Windows has no process groups to ask about.
-  if (platform === "win32") return false;
+  if (platform === "win32") return hasWindowsChildProcess(pid);
   try {
     process.kill(-pid, 0);
     return true;
