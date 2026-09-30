@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   configureMobileConnectDevelopmentNetwork,
@@ -8,6 +11,7 @@ import {
   findAvailablePort,
   parseDevelopmentTarget,
   projectRoot,
+  resolvePackageBin,
   selectMobileConnectLanAddress,
   signalOwnedProcess,
   stopOwnedProcesses,
@@ -52,8 +56,8 @@ describe("development service runner", () => {
   it("builds the local Signal command with the Auth API development keys", () => {
     const spec = createDevelopmentServiceSpec("remote", { REMOTE_SIGNAL_PORT: "3101" });
 
-    expect(spec.args).toContain(`${projectRoot}/apps/auth-api/.env.dev`);
-    expect(spec.args).toContain(`${projectRoot}/remote/api`);
+    expect(spec.args).toContain(join(projectRoot, "apps", "auth-api", ".env.dev"));
+    expect(spec.args).toContain(join(projectRoot, "remote", "api"));
     expect(spec.env.REMOTE_SIGNAL_PORT).toBe("3101");
   });
 
@@ -297,5 +301,30 @@ describe("development service runner", () => {
 
     expect(time).toBe(100);
     expect(kill).toHaveBeenCalledWith(-321, "SIGKILL");
+  });
+});
+
+describe("resolvePackageBin", () => {
+  it("resolves binaries according to platform and installed extension", () => {
+    const root = mkdtempSync(join(tmpdir(), "openbot-bin-test-"));
+    try {
+      const binDir = join(root, "node_modules", ".bin");
+      mkdirSync(binDir, { recursive: true });
+      writeFileSync(join(binDir, "dotenvx.exe"), "");
+      writeFileSync(join(binDir, "storybook.cmd"), "");
+      writeFileSync(join(binDir, "vite"), "");
+
+      // On Windows: .exe takes precedence, then .cmd, then fallback to base name
+      expect(resolvePackageBin(root, "dotenvx", "win32")).toBe(join(binDir, "dotenvx.exe"));
+      expect(resolvePackageBin(root, "storybook", "win32")).toBe(join(binDir, "storybook.cmd"));
+      expect(resolvePackageBin(root, "vite", "win32")).toBe(join(binDir, "vite"));
+      expect(resolvePackageBin(root, "other", "win32")).toBe(join(binDir, "other"));
+
+      // On POSIX: base name is always returned
+      expect(resolvePackageBin(root, "dotenvx", "darwin")).toBe(join(binDir, "dotenvx"));
+      expect(resolvePackageBin(root, "storybook", "linux")).toBe(join(binDir, "storybook"));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

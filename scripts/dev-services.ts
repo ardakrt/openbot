@@ -101,6 +101,17 @@ export function servicesForTarget(target: DevelopmentTarget): DevelopmentService
   return ["api", "remote", "app"];
 }
 
+export function resolvePackageBin(root: string, name: string, platform: NodeJS.Platform = process.platform): string {
+  const binDir = join(root, "node_modules", ".bin");
+  if (platform === "win32") {
+    const exe = join(binDir, `${name}.exe`);
+    if (existsSync(exe)) return exe;
+    const cmd = join(binDir, `${name}.cmd`);
+    if (existsSync(cmd)) return cmd;
+  }
+  return join(binDir, name);
+}
+
 export function createDevelopmentServiceSpec(
   name: DevelopmentService,
   environment: NodeJS.ProcessEnv = process.env,
@@ -121,7 +132,7 @@ export function createDevelopmentServiceSpec(
   }
 
   if (name === "remote") {
-    const dotenvx = join(projectRoot, "node_modules", ".bin", process.platform === "win32" ? "dotenvx.cmd" : "dotenvx");
+    const dotenvx = resolvePackageBin(projectRoot, "dotenvx");
     return {
       name,
       executable: dotenvx,
@@ -147,12 +158,7 @@ export function createDevelopmentServiceSpec(
 
   const isTestClient = name === "test-client";
   const outputDirectory = isTestClient ? "out-dev-test-client" : "out-dev-app";
-  const electronVite = join(
-    projectRoot,
-    "node_modules",
-    ".bin",
-    process.platform === "win32" ? "electron-vite.cmd" : "electron-vite",
-  );
+  const electronVite = resolvePackageBin(projectRoot, "electron-vite");
   return {
     name,
     executable: electronVite,

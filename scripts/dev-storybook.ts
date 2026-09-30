@@ -7,7 +7,7 @@
 
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { withDevPortAllocation } from "./dev-automation/port-allocation";
@@ -19,7 +19,7 @@ import {
   removeDevStackRecord,
   writeDevStackRecord,
 } from "./dev-automation/stack-registry";
-import { findAvailablePort, stopOwnedProcesses } from "./dev-services";
+import { findAvailablePort, resolvePackageBin, stopOwnedProcesses } from "./dev-services";
 
 const logger = createOpenBotLogger("dev-storybook");
 
@@ -54,7 +54,7 @@ export function parseStorybookInvocation(args: string[]): StorybookInvocation {
 }
 
 export function storybookExecutable(root = projectRoot): string {
-  return join(root, "node_modules", ".bin", process.platform === "win32" ? "storybook.cmd" : "storybook");
+  return resolvePackageBin(root, "storybook");
 }
 
 export function createStorybookStackRecord(port: number, supervisorPid: number, startedAt: number): DevStackRecord {

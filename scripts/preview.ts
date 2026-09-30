@@ -1,18 +1,14 @@
 import { spawn } from "node:child_process";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createOpenBotLogger } from "@openbot/logging";
+import { resolvePackageBin } from "./dev-services";
 import { withoutElectronRuntimeFlags } from "./electron-spawn-env";
 
 const logger = createOpenBotLogger("preview");
 
 const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-const executable = join(
-  projectRoot,
-  "node_modules",
-  ".bin",
-  process.platform === "win32" ? "electron-vite.cmd" : "electron-vite",
-);
+const executable = resolvePackageBin(projectRoot, "electron-vite");
 const child = spawn(executable, ["preview", ...process.argv.slice(2)], {
   cwd: projectRoot,
   // The parent shell may run inside an Electron harness with

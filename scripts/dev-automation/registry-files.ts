@@ -31,6 +31,7 @@ export function assertOwnerOnlyDirectory(
   directory: string,
   stats: DirectoryOwnership,
   owner = process.getuid?.(),
+  platform: NodeJS.Platform = process.platform,
 ): void {
   if (stats.symbolicLink || (owner !== undefined && stats.uid !== owner)) {
     throw new Error(
@@ -38,7 +39,9 @@ export function assertOwnerOnlyDirectory(
         "Remove it and start `bun run dev` again.",
     );
   }
-  if ((stats.mode & 0o077) !== 0) {
+  // Windows directory modes are synthesized (0o666/0o777) and chmod cannot alter them.
+  // Security on Windows is governed by NTFS user-profile ACLs instead.
+  if (platform !== "win32" && (stats.mode & 0o077) !== 0) {
     throw new Error(
       `${directory} is accessible to other accounts (mode ${(stats.mode & 0o777).toString(8)}). ` +
         "Remove it and start `bun run dev` again: a registry another account can write lets it choose " +
@@ -47,13 +50,18 @@ export function assertOwnerOnlyDirectory(
   }
 }
 
-export function assertRegistryDirectoryOwnership(directory: string): void {
+export function assertRegistryDirectoryOwnership(directory: string, platform = process.platform): void {
   const stats = lstatSync(directory);
-  assertOwnerOnlyDirectory(directory, {
-    uid: stats.uid,
-    mode: stats.mode,
-    symbolicLink: stats.isSymbolicLink(),
-  });
+  assertOwnerOnlyDirectory(
+    directory,
+    {
+      uid: stats.uid,
+      mode: stats.mode,
+      symbolicLink: stats.isSymbolicLink(),
+    },
+    process.getuid?.(),
+    platform,
+  );
 }
 
 // Owner-only, because the path is predictable and shared: on a multi-account
