@@ -11,6 +11,7 @@ import { createHostedBilling } from "./hosted-billing";
 import { type HostedServerService, HostedServerServiceError } from "./hosted-server-service";
 import { HostedSiteInputError } from "./hosted-site-contract";
 import { enforceHostedSiteReportRateLimit as enforceReportRateLimit } from "./hosted-site-request-policy";
+import { type HostedSiteScope, resolveHostedSiteScope } from "./hosted-site-server";
 import { HostedSiteService } from "./hosted-site-service";
 import { JsonBodyError } from "./json-body";
 import { type ApnsLiveActivitySender, sharedApnsSender } from "./live-activity-relay";
@@ -28,6 +29,7 @@ import {
   verifyRemoteServiceSignature,
 } from "./remote-control-plane";
 import { SkillMarketplace, SkillMarketplaceError } from "./skill-marketplace";
+import { SlackAppError, SlackAppService } from "./slack-app";
 import { requireWorkerBindings, type TeamInviteEmailDelivery } from "./types";
 
 export function requestAuthService(): AuthService {
@@ -61,6 +63,11 @@ export function requestAgentMarketplace(): AgentMarketplace {
 
 export function requestAgentTemplates(): AgentTemplates {
   return new AgentTemplates(requireWorkerBindings(env));
+}
+
+/** The sites that a signed-in `/v1/sites` request can see and change. See `resolveHostedSiteScope`. */
+export function requestHostedSiteScope(request: Request, userId: string): Promise<HostedSiteScope> {
+  return resolveHostedSiteScope(requireWorkerBindings(env).DB, userId, request);
 }
 
 export function requestHostedSiteService(): HostedSiteService {
@@ -267,6 +274,19 @@ export function verifyRemoteServiceRequest(request: Request, body: string): Prom
 
 export function remoteControlPlaneErrorResponse(error: unknown): Response {
   if (error instanceof RemoteControlPlaneError) return apiError(error.status, error.code, error.message);
+  return authErrorResponse(error);
+}
+
+export function requestSlackApp(): SlackAppService {
+  const bindings = requireWorkerBindings(env);
+  // The events are already in D1 and the cron redelivers them, so the answer does not wait.
+  return new SlackAppService(bindings, {
+    flushAuthEvents: async () => waitUntil(deliverPendingRemoteAuthEvents(bindings, Date.now())),
+  });
+}
+
+export function slackAppErrorResponse(error: unknown): Response {
+  if (error instanceof SlackAppError) return apiError(error.status, error.code, error.message);
   return authErrorResponse(error);
 }
 

@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { HOSTED_SITE_ACTIVE_LIMIT } from "@openbot/contracts/hosted-sites";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type {
   AgentModelOption,
@@ -426,7 +425,7 @@ export class OpenBotToolRouter {
     }
 
     if (params.tool === "list_sites") {
-      return openBotToolResult({ sites: await this.#hostedSites.listSites(), limit: HOSTED_SITE_ACTIVE_LIMIT });
+      return openBotToolResult(await this.#hostedSites.listSites());
     }
 
     if (isHostedSiteMutationTool(params.tool)) throw new Error("Hosted site changes require user approval.");
@@ -705,6 +704,11 @@ export class OpenBotToolRouter {
       throw new Error("expectsReply must be a boolean.");
     }
 
+    // A request from a Slack turn: the teammate's answer goes back to that Slack thread.
+    const messagingReturn = this.#mailbox
+      .findDeliveriesByTurn(senderAgentId, params.turnId)
+      .map(({ delivery }) => this.#mailbox.messagingOrigin(delivery.id))
+      .find((origin) => origin !== null);
     const receipt = await this.#mailbox.enqueue({
       sender: { kind: "agent", agentId: senderAgentId },
       recipientAgentIds: recipientValues,
@@ -712,6 +716,7 @@ export class OpenBotToolRouter {
       sourcePaths: paths,
       replyToMessageId: replyToMessageId ?? null,
       expectsReply,
+      ...(messagingReturn ? { messagingReturn } : {}),
       idempotencyKey: `${params.threadId}:${params.turnId}:${params.callId}`,
     });
     for (const recipient of recipientValues) {

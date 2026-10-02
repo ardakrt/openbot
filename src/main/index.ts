@@ -1,11 +1,23 @@
 import { join, resolve } from "node:path";
 import { parseInviteUrl } from "@openbot/contracts/invite-links";
-import { type CentralAuthState, IPC_ENDPOINTS } from "@openbot/contracts/ipc";
+import { type AppLogoColor, type CentralAuthState, IPC_ENDPOINTS } from "@openbot/contracts/ipc";
 import { resolveLocale, translateFor } from "@openbot/i18n";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { createRemoteDirectoryRefresh } from "@openbot/team-client/remote-directory";
-import { app, BrowserWindow, dialog, Notification, net, powerMonitor, protocol, screen, shell } from "electron";
-import { readAppVariant, resolveAppIconPath } from "./app-icon";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  type NativeImage,
+  Notification,
+  nativeImage,
+  net,
+  powerMonitor,
+  protocol,
+  screen,
+  shell,
+} from "electron";
+import { readAppVariant, resolveAppIconPath, resolveLogoColorIconPath } from "./app-icon";
 import { type ApplicationServices, createApplicationServices } from "./application-services";
 import { type DeepLink, findDeepLink, parseDeepLink } from "./deep-link-router";
 import { requestNotificationPermission, showRetainedNotification } from "./desktop-notifications";
@@ -43,6 +55,7 @@ import { hostedSiteIpcHandlers } from "./ipc/hosted-site-handlers";
 import { marketplaceAgentIpcHandlers } from "./ipc/marketplace-agent-handlers";
 import { mcpServerIpcHandlers } from "./ipc/mcp-server-handlers";
 import { memoryIpcHandlers } from "./ipc/memory-handlers";
+import { messagingIpcHandlers } from "./ipc/messaging-handlers";
 import { notificationIpcHandlers } from "./ipc/notification-handlers";
 import { pluginIpcHandlers } from "./ipc/plugin-handlers";
 import { providerAdminIpcHandlers } from "./ipc/provider-admin-handlers";
@@ -201,7 +214,7 @@ let relaunchRequested = false;
  * and the sign-in waiting for that grant lives in this process. It is also never held: a grant is
  * answered by the sign-in that started it, and there is no such sign-in before the app is running.
  */
-type RendererDeepLink = Exclude<DeepLink, { kind: "mcp-auth" }>;
+type RendererDeepLink = Exclude<DeepLink, { kind: "mcp-auth" | "slack-workspace" }>;
 
 // One link at a time, of whichever kind: a second replaces the first, because what a user opened
 // last is what they meant. `deepLinkReceiverReady` says a window has asked for it, which is what
@@ -282,6 +295,38 @@ const windows = createMainWindowController({
   reportError: (message, error) => logger.error(message, toLogValue(error)),
 });
 
+let appIconColorImage: NativeImage | undefined;
+
+/**
+ * Shows the chosen logo color on the Dock icon, or on each window icon where there is no Dock. A dev
+ * or preview build keeps the icon of its build, so it is not mistaken for the release. macOS has no
+ * alternate app icon API, so when the app is closed the Dock shows the icon inside the app bundle:
+ * changing that file would break the code signature.
+ */
+function applyAppIconColor(color: AppLogoColor): void {
+  if (appVariant !== "production") return;
+  const icon = nativeImage.createFromPath(
+    resolveLogoColorIconPath({
+      color,
+      platform: process.platform,
+      isPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+      sourceRoot: resolve(__dirname, "../.."),
+    }),
+  );
+  if (icon.isEmpty()) return;
+  if (process.platform === "darwin") {
+    app.dock?.setIcon(icon);
+    return;
+  }
+  // A window takes `appIconPath` when it is created, so a window opened after the choice gets the
+  // chosen icon here.
+  if (!appIconColorImage)
+    app.on("browser-window-created", (_event, window) => window.setIcon(appIconColorImage ?? icon));
+  appIconColorImage = icon;
+  for (const window of BrowserWindow.getAllWindows()) window.setIcon(icon);
+}
+
 /**
  * Outside macOS, closing the main window ends OpenBot.
  *
@@ -343,6 +388,7 @@ function registerIpcHandlers({
   service,
   providerRuntimes,
   providerCredentials,
+  messaging,
   mailbox,
   browser,
   browserPictureInPicture,
@@ -355,6 +401,7 @@ function registerIpcHandlers({
   approvalAutomation,
   agentAdminSettings,
   language,
+  logoColor,
   notificationPreference,
   agentInitialization,
   sidebarLayout,
@@ -399,6 +446,7 @@ function registerIpcHandlers({
       analyticsPreferenceFile,
       approvalAutomation,
       language,
+      logoColor,
       initializeAgent: () => agentInitialization.start(),
       appVariant,
       getMainWindow,
@@ -415,7 +463,7 @@ function registerIpcHandlers({
     ...voiceIpcHandlers({ voice }),
     ...accountIpcHandlers({ centralAuth, host }),
     ...skillIpcHandlers({ skills, getMainWindow, translate: language.translate }),
-    ...hostedSiteIpcHandlers({ hostedSites, getMainWindow, translate: language.translate }),
+    ...hostedSiteIpcHandlers({ hostedSites, remoteServers, getMainWindow, translate: language.translate }),
     ...githubConnectorIpcHandlers({ githubConnector }),
     ...billingIpcHandlers({ billing }),
     ...hostedServerIpcHandlers({ hostedServers }),
@@ -472,6 +520,7 @@ function registerIpcHandlers({
       customProviders: customProviderChanges,
       remoteServers,
     }),
+    ...messagingIpcHandlers({ messaging }),
     ...mcpServerIpcHandlers({
       service,
       remoteServers,
@@ -599,6 +648,10 @@ function acceptDeepLink(link: DeepLink): void {
     receiveMcpAuthorizationCode(link.state, link.code);
     return;
   }
+  if (link.kind === "slack-workspace") {
+    receiveSlackSignIn(link);
+    return;
+  }
   pendingDeepLink = link;
   const window = windowHolder.current;
   if (!window || window.isDestroyed() || !deepLinkReceiverReady) return;
@@ -626,7 +679,25 @@ function takePendingDeepLink(kind: RendererDeepLink["kind"]): string | null {
 
 /** A link of a kind a renderer can be sent, or null for one it cannot - which includes no link. */
 function takeRendererDeepLink(link: DeepLink | null): RendererDeepLink | null {
-  return link && link.kind !== "mcp-auth" ? link : null;
+  return link && link.kind !== "mcp-auth" && link.kind !== "slack-workspace" ? link : null;
+}
+
+/**
+ * Hands a Slack install the sealed token it is waiting for. As with an MCP grant, a link this run did
+ * not start does nothing and raises no window.
+ */
+function receiveSlackSignIn(link: Extract<DeepLink, { kind: "slack-workspace" }>): void {
+  const messaging = services?.messaging;
+  if (!messaging) return;
+  void messaging
+    .completeSlackWorkspace(link.nonce, link.grant)
+    .then((accepted) => {
+      const window = windowHolder.current;
+      if (accepted && window && !window.isDestroyed()) showMainWindow(window);
+    })
+    .catch(() => {
+      // The Slack settings show the connection's state. The error can quote Slack.
+    });
 }
 
 /**
@@ -757,6 +828,7 @@ if (!hasSingleInstanceLock) {
         dynamicIsland,
         teamStore,
         language,
+        logoColor,
         trace,
       } = built;
 
@@ -811,6 +883,13 @@ if (!hasSingleInstanceLock) {
           sendToRenderer(window, IPC_ENDPOINTS.app.appLanguagePreference, preference);
         }
       });
+      applyAppIconColor(logoColor.preference.color);
+      logoColor.subscribe((preference) => {
+        applyAppIconColor(preference.color);
+        for (const window of BrowserWindow.getAllWindows()) {
+          sendToRenderer(window, IPC_ENDPOINTS.app.appLogoColorPreference, preference);
+        }
+      });
       await dynamicIsland
         .initialize()
         .catch((error) => logger.error("Unable to initialize Dynamic Island:", toLogValue(error)));
@@ -826,6 +905,8 @@ if (!hasSingleInstanceLock) {
       screen.on("display-metrics-changed", reconcileDynamicIsland);
       powerMonitor.on("resume", reconcileDynamicIsland);
       powerMonitor.on("resume", () => remoteServers.wake());
+      // A Slack socket can be dead after sleep without knowing it; reconnect instead of waiting for a ping.
+      powerMonitor.on("resume", () => built.messaging.resume());
       const routineWake = new RoutineWake({ routines: service, isOnline: () => net.isOnline() });
       powerMonitor.on("suspend", () => routineWake.suspend());
       powerMonitor.on("resume", () => routineWake.resume());

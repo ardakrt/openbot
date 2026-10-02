@@ -60,6 +60,8 @@ export const messages = {
   "error.provider.downloadSize": "ランタイムのダウンロードのサイズが予期しないものです。",
   "error.provider.downloadIntegrity": "ランタイムのダウンロードが整合性チェックに失敗しました。",
   "error.provider.runtimeReplacing": "別のインスタンスがランタイムを置き換えているため、インストールできませんでした。",
+  "error.provider.runtimeFilesInUse":
+    "別のプログラムがランタイムのファイルを開いているため、インストールできませんでした。そのプログラムを閉じてから、もう一度お試しください。",
   "error.provider.metadataHttp": "ランタイムのメタデータのダウンロードが HTTP {status} で失敗しました。",
   "error.provider.metadataIntegrity": "ランタイムのメタデータが整合性チェックに失敗しました。",
   "error.provider.diskSpace": "このプロバイダーに必要な空きディスク容量が足りません。",
@@ -138,6 +140,10 @@ export const messages = {
   "error.provider.bunVersionUnreadable": "Bun ランタイムのバージョンを読み取れません。",
   "error.provider.connectBeforeProfile": "プロフィールを生成する前に、選択したプロバイダーに接続してください。",
   "error.provider.cliNotReady": "{provider} CLI の準備ができていないか、サインインしていません。",
+  "error.provider.cliTimedOut":
+    "{provider} が時間内に応答しませんでした。コンピューターの負荷が高い可能性があります。OpenBot が再試行します。",
+  "error.provider.cliTimedOutRefresh":
+    "{provider} が時間内に応答しませんでした。コンピューターの負荷が高い可能性があります。プロバイダーを更新して再試行してください。",
   "error.provider.noCodeSignIn": "{provider} にはコードでサインインできません。",
   "error.provider.codeLoginNoLink": "プロバイダーがサインインのリンクを表示しませんでした。もう一度お試しください。",
   "error.provider.codeLoginNotWaiting": "コードを待っているサインインはありません。サインインをやり直してください。",
@@ -181,6 +187,14 @@ export const messages = {
   "error.provider.antigravityNotStarted": "Gemini サーバーは見つかりましたが、バージョンを読み取れません。",
   "error.provider.antigravityVersionUnreadable": "Gemini サーバーのバージョンを読み取れません。",
   "error.provider.antigravitySignIn": "Gemini を使うには Google でサインインしてください。",
+  "error.provider.cursorArchivePath": "Cursor のアーカイブに予期しないファイルがあります。",
+  "error.provider.cursorChecksum": "Cursor ランタイムのチェックサムが一致しません。",
+  "error.provider.cursorReleaseShape": "Cursor のリリースの形式が予期しないものです。",
+  "error.provider.cursorMissing":
+    "Cursor はダウンロードされていません。続けるには OpenBot でダウンロードしてください。",
+  "error.provider.cursorNotStarted": "Cursor エージェントは見つかりましたが、バージョンを読み取れません。",
+  "error.provider.cursorVersionUnreadable": "Cursor エージェントのバージョンを読み取れません。",
+  "error.provider.cursorSignIn": "Cursor を使うには Cursor でサインインするか、CURSOR_API_KEY を設定してください。",
   "error.provider.foreignReasoning":
     "別のアカウントまたは API キーが受け取ったため、{provider} はこのチャットの以前の推論を受け付けませんでした。OpenBot はチャット履歴を引き継いだ新しい {provider} セッションを開始しました。もう一度お試しください。",
   "error.provider.grokSignIn": "Grok を使うには `grok login` を実行するか、XAI_API_KEY を設定してください。",

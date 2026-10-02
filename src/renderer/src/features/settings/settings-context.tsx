@@ -1,4 +1,8 @@
-import { type ApprovalAutomationPreference, agentAutoApprovalEnabled } from "@openbot/contracts/ipc";
+import {
+  type ApprovalAutomationPreference,
+  agentAutoApprovalEnabled,
+  type DynamicIslandGeometry,
+} from "@openbot/contracts/ipc";
 import { toast } from "@openbot/ui";
 import { DEFAULT_GENERAL_SETTINGS, type GeneralSettingsValue } from "@openbot/ui/features/settings/app-settings";
 import { currentText } from "@openbot/ui/text";
@@ -11,6 +15,7 @@ import { useAuth } from "../account/account-context";
 import { useSetup } from "../onboarding/onboarding-context";
 import { settingsPort } from "./settings-port";
 import { isOpenSettingsShortcut } from "./settings-shortcut";
+import type { SettingsTab } from "./settings-tabs";
 
 const ANALYTICS_APP_VERSION_STORAGE_KEY = "openbot:analytics-app-version";
 
@@ -39,6 +44,8 @@ const Settings = createSimpleContext({
 
     const [analyticsPreferenceLoaded, setAnalyticsPreferenceLoaded] = createSignal<boolean | null>(null);
     const [skillsMarketplaceOpen, setSkillsMarketplaceOpen] = createSignal(false);
+    // Undefined until main answers. The Settings preview then draws the notch it had before.
+    const [builtInDisplayGeometry, setBuiltInDisplayGeometry] = createSignal<DynamicIslandGeometry | undefined>();
     /**
      * The plugin an `openbot://plugins/<slug>` link asked for, held beside the open flag because the
      * marketplace is loaded lazily: the slug has to outlive the chunk load that shows it. It is a
@@ -51,6 +58,8 @@ const Settings = createSimpleContext({
      */
     const [pendingAgentTemplateId, setPendingAgentTemplateId] = createSignal<string | null>(null);
     const [appSettingsOpen, setAppSettingsOpen] = createSignal(false);
+    /** The tab that the next opening shows. Undefined keeps the tab that was open last. */
+    const [appSettingsTab, setAppSettingsTab] = createSignal<SettingsTab | undefined>();
     const [generalSettings, setGeneralSettings] = createSignal<GeneralSettingsValue>({
       ...DEFAULT_GENERAL_SETTINGS,
       taskCompletionSound: isCompletionSoundEnabled(),
@@ -257,9 +266,10 @@ const Settings = createSimpleContext({
     }
 
     /** Remembers what to focus when the dialog closes; the dialog itself restores it. */
-    function openAppSettings(trigger?: HTMLElement | null): void {
+    function openAppSettings(trigger?: HTMLElement | null, tab?: SettingsTab): void {
       const target = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
       appSettingsRestoreTarget = target;
+      setAppSettingsTab(tab);
       setAppSettingsOpen(true);
     }
 
@@ -348,6 +358,10 @@ const Settings = createSimpleContext({
           })),
         )
         .catch(() => undefined);
+      void settingsPort()
+        .dynamicIsland.getBuiltInDisplayGeometry()
+        .then((geometry) => setBuiltInDisplayGeometry(geometry))
+        .catch(() => undefined);
     });
 
     const sendTestNotification = () => settingsPort().notifications.test();
@@ -356,6 +370,7 @@ const Settings = createSimpleContext({
     return {
       analyticsPreferenceLoaded,
       generalSettings,
+      builtInDisplayGeometry,
       turboModePending,
       updateGeneralSettings,
       sendTestNotification,
@@ -365,6 +380,7 @@ const Settings = createSimpleContext({
       appSettingsOpen,
       setAppSettingsOpen,
       appSettingsRestoreTarget: () => appSettingsRestoreTarget,
+      appSettingsTab,
       openAppSettings,
       skillsMarketplaceOpen,
       setSkillsMarketplaceOpen,

@@ -328,6 +328,12 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
     return result;
   }
 
+  /** The machine token of a registered host, so a site request can prove the server. Never log it. */
+  hostSiteCredential(hostId: string): { hostId: string; machineToken: string } | null {
+    const machineToken = this.#teamHostTokens.get(hostId.toLowerCase());
+    return machineToken ? { hostId, machineToken } : null;
+  }
+
   issueRemoteHostTicket(hostId: string): Promise<RemoteConnectionBootstrap> {
     const machineToken = this.#teamHostTokens.get(hostId.toLowerCase());
     if (!machineToken) throw new Error(sourceText("error.auth.hostCredentialUnavailable"));
@@ -335,6 +341,35 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
       `/v2/remote/hosts/${encodeURIComponent(hostId)}/ticket`,
       { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ machineToken }) },
       decodeRemoteSessionTicket,
+    );
+  }
+
+  /**
+   * The Slack route ticket of this host: the workspaces that the account service links to it, which
+   * Signal routes to its `ingress` socket.
+   */
+  issueSlackRoute(hostId: string): Promise<string> {
+    const machineToken = this.#teamHostTokens.get(hostId.toLowerCase());
+    if (!machineToken) throw new Error(sourceText("error.auth.hostCredentialUnavailable"));
+    return this.#request(
+      `/v2/remote/hosts/${encodeURIComponent(hostId)}/slack-route`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ machineToken }) },
+      (value) => requiredString(decodeRecord(value, "Slack route"), "ticket"),
+    );
+  }
+
+  /** Unlinks a Slack workspace from this host, so Signal stops routing its events here. */
+  async unlinkSlackWorkspace(hostId: string, teamId: string): Promise<void> {
+    const machineToken = this.#teamHostTokens.get(hostId.toLowerCase());
+    if (!machineToken) throw new Error(sourceText("error.auth.hostCredentialUnavailable"));
+    await this.#request(
+      `/v2/remote/hosts/${encodeURIComponent(hostId)}/slack-disconnect`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ machineToken, teamId }),
+      },
+      () => undefined,
     );
   }
 

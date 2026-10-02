@@ -59,6 +59,8 @@ export const messages = defineMessages("error.provider", {
   "error.provider.downloadSize": "The runtime download has an unexpected size.",
   "error.provider.downloadIntegrity": "The runtime download failed its integrity check.",
   "error.provider.runtimeReplacing": "The runtime could not be installed because another instance is replacing it.",
+  "error.provider.runtimeFilesInUse":
+    "The runtime could not be installed because another program has its files open. Close it and try again.",
   "error.provider.metadataHttp": "Runtime metadata download failed with HTTP {status}.",
   "error.provider.metadataIntegrity": "Runtime metadata failed its integrity check.",
   "error.provider.diskSpace": "There is not enough free disk space for this provider.",
@@ -131,6 +133,9 @@ export const messages = defineMessages("error.provider", {
   "error.provider.bunVersionUnreadable": "Unable to read the Bun runtime version.",
   "error.provider.connectBeforeProfile": "Connect the selected provider before generating a profile.",
   "error.provider.cliNotReady": "{provider} CLI is not ready or signed in.",
+  "error.provider.cliTimedOut": "{provider} did not answer in time. The computer may be busy. OpenBot will try again.",
+  "error.provider.cliTimedOutRefresh":
+    "{provider} did not answer in time. The computer may be busy. Refresh the providers to try again.",
   "error.provider.noCodeSignIn": "{provider} cannot be signed in with a code.",
   "error.provider.codeLoginNoLink": "The provider did not show a sign-in link. Try again.",
   "error.provider.codeLoginNotWaiting": "No sign-in is waiting for a code. Start the sign-in again.",
@@ -171,6 +176,13 @@ export const messages = defineMessages("error.provider", {
   "error.provider.antigravityNotStarted": "The Gemini server was found, but its version cannot be read.",
   "error.provider.antigravityVersionUnreadable": "Unable to read the Gemini server version.",
   "error.provider.antigravitySignIn": "Sign in with Google to use Gemini.",
+  "error.provider.cursorArchivePath": "The Cursor archive has an unexpected file.",
+  "error.provider.cursorChecksum": "Cursor runtime checksum mismatch.",
+  "error.provider.cursorReleaseShape": "The Cursor release has an unexpected shape.",
+  "error.provider.cursorMissing": "Cursor is not downloaded. Download it in OpenBot to continue.",
+  "error.provider.cursorNotStarted": "The Cursor agent was found, but its version cannot be read.",
+  "error.provider.cursorVersionUnreadable": "Unable to read the Cursor agent version.",
+  "error.provider.cursorSignIn": "Sign in with Cursor or set CURSOR_API_KEY to use Cursor.",
   "error.provider.foreignReasoning":
     "{provider} did not accept the earlier reasoning in this chat, because a different account or API key received it. OpenBot started a new {provider} session with the chat history. Try again.",
   "error.provider.grokSignIn": "Run `grok login` or set XAI_API_KEY to use Grok.",

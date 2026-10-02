@@ -19,6 +19,7 @@ import type {
   ChannelMemory,
   ChannelRoutine,
   ChannelRoutineRun,
+  ConversationFileSearchPage,
   ConversationMessage,
   ConversationMessageSender,
   ConversationPage,
@@ -132,12 +133,18 @@ import type { ConversationMarkerExclusions } from "./conversation-read-store";
 import type { HostMemory } from "./host-memory";
 import type { MailboxStore } from "./mailbox-store";
 import { McpServerStore } from "./mcp-server-store";
+import { MessagingThreads } from "./messaging/messaging-threads";
 import { decodeRecordResponse } from "./protocol";
 import { NO_PROVIDER_CREDENTIALS, type ProviderClientContext } from "./provider-drivers";
 import { recordAgentRestartActivity } from "./restart-activity";
 import { RoutineTimer } from "./routine-timer";
 import type { SidebarLayoutStore } from "./sidebar-layout-store";
-import { type ResolvedSharedFile, resolveSharedFile, resolveWorkspaceFile } from "./workspace-paths";
+import {
+  type ResolvedSharedFile,
+  type ResolvedWorkspaceFile,
+  resolveSharedFile,
+  resolveWorkspaceFile,
+} from "./workspace-paths";
 
 const logger = createOpenBotLogger("agent-service");
 
@@ -150,7 +157,7 @@ const DEFAULT_BUNDLED_EXECUTABLES: BundledProviderExecutables = { claude: null, 
 
 export type { TestMcpServerOptions } from "./agent/mcp-gateway";
 export type { RoutineMutationOptions } from "./agent/routine-scheduler";
-export type { ResolvedSharedFile } from "./workspace-paths";
+export type { ResolvedSharedFile, ResolvedWorkspaceFile } from "./workspace-paths";
 
 interface AgentServiceEvents {
   event: [event: AgentEvent];
@@ -216,6 +223,7 @@ export interface AgentServiceOptions {
 
 export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly channels: ChannelService;
+  readonly messaging: MessagingThreads;
   readonly #profileSave: ProfileSave;
   readonly #profileClients = new ProfileClients();
   readonly #store: AgentStore;
@@ -583,10 +591,12 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       threads: this.#threads,
       hooks: {
         emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
-        executionThreads: () => this.channels.store.executionThreads(),
+        executionThreads: () => [...this.channels.store.executionThreads(), ...this.messaging.store.executionThreads()],
         deliveryThreadId: (deliveryId) => {
           const assignment = this.channels.store.assignmentForDelivery(deliveryId);
-          return assignment ? this.channels.store.context(assignment.channelId, assignment.agentId).threadId : null;
+          return assignment
+            ? this.channels.store.context(assignment.channelId, assignment.agentId).threadId
+            : this.messaging.threadForDelivery(deliveryId);
         },
       },
     });
@@ -615,16 +625,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         const session = agent ? this.#store.database.activeProviderSession(threadId, agent.provider) : null;
         return session ? this.#compaction.contextInputCharacters(session.externalSessionId) : 120_000;
       },
-      forgetThread: async (threadId) => {
-        const sessions = this.#store.database.listProviderSessions(threadId);
-        for (const session of sessions) await this.#threads.deleteProviderSessionFiles(session.externalSessionId);
-        for (const session of sessions) {
-          this.#conversation.unbindThread(session.externalSessionId);
-          this.#conversation.unloadThread(session.externalSessionId);
-          this.#compaction.forgetThread(session.externalSessionId);
-        }
-        this.#conversation.forgetExecutionThread(threadId);
-      },
+      forgetThread: (threadId) => this.#forgetExecutionThread(threadId),
       normalBusy: () =>
         this.#mailbox
           .unresolvedDeliveries()
@@ -684,6 +685,13 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         excludedChannels: () => new Set(),
       },
     });
+    this.messaging = new MessagingThreads(store.database, mailbox, {
+      schedule: (agentId) => this.#drain.scheduleDrain(agentId),
+      busy: (agentId) =>
+        Boolean(this.#conversation.workingSnapshot(agentId)?.activeTurnId || this.#mailbox.nextQueued(agentId)),
+      interrupt: (agentId, turnId, threadId) => this.interrupt(agentId, turnId, threadId),
+      forgetThread: (threadId) => this.#forgetExecutionThread(threadId),
+    });
     this.#memoryHold = new MemoryHold({
       memory: hostMemory,
       hooks: {
@@ -697,6 +705,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     });
     this.#drain = new DrainScheduler({
       channels: this.channels,
+      messaging: this.messaging,
       store,
       mailbox,
       mailboxSync: this.#mailboxSync,
@@ -761,6 +770,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       conversation: this.#conversation,
       browser,
       channels: this.channels,
+      messaging: this.messaging,
       routines: this.#routines,
       duplication: this.#duplication,
       drain: this.#drain,
@@ -1131,6 +1141,15 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     return this.#providers.preferredProvider();
   }
 
+  /**
+   * The provider that `createAgent` or `createAgentProfile` puts a new agent on: the one of the model
+   * or provider that `input` names, else the starting choice. `null` when nothing lists a model, and
+   * the record keeps the built-in default.
+   */
+  newAgentProvider(input: Pick<CreateAgentInput, "provider" | "model"> = {}): AgentProvider | null {
+    return (creationModel(input, this.#endpoints.available()) ?? this.#startingChoice())?.provider ?? null;
+  }
+
   /** The provider and model setup or Settings recorded. */
   #preference(): ProviderPreference {
     return { provider: this.#providers.preferredProvider(), model: this.#providers.preferredModel() };
@@ -1225,8 +1244,20 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       await this.#prepareAgentWorkspace(agent);
       // A template, a marketplace agent and an imported one name no model. They start where a new
       // agent does; with nothing listed yet they keep the record's own, because no message waits.
-      const starting = this.#startingChoice();
-      if (starting) agent = await this.#landOnStartingChoice(agent, starting);
+      // The Slack orchestrator names the model the user picked.
+      const requested = creationModel(input, this.#endpoints.available());
+      const starting = requested ? null : this.#startingChoice();
+      if (requested)
+        agent = await this.#store.updateAgent({
+          agentId: agent.id,
+          provider: requested.provider,
+          model: requested.model.id,
+          reasoningEffort:
+            input.reasoningEffort && requested.model.supportedReasoningEfforts.includes(input.reasoningEffort)
+              ? input.reasoningEffort
+              : requested.model.defaultReasoningEffort,
+        });
+      else if (starting) agent = await this.#landOnStartingChoice(agent, starting);
       if (input.title) agent = await this.#store.updateAgent({ agentId: agent.id, title: input.title });
       this.#emit({ type: "agents-changed", agents: this.listAgents() });
       return agent;
@@ -1379,10 +1410,24 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     return resolveSharedFile(this.#store.sharedRoot, inputPath);
   }
 
-  async resolveWorkspaceFile(agentId: string, inputPath: string): Promise<ResolvedSharedFile> {
+  /** A file a remote member asks for. It must be inside the agent's workspace. */
+  async resolveWorkspaceFile(agentId: string, inputPath: string): Promise<ResolvedWorkspaceFile> {
+    return resolveWorkspaceFile(this.#agentForFile(agentId), inputPath);
+  }
+
+  /**
+   * A file the local user opens from the agent's reply. An agent with full computer access edits files
+   * anywhere, and it could already read each of them, so its links can point outside the workspace.
+   */
+  async resolveLocalWorkspaceFile(agentId: string, inputPath: string): Promise<ResolvedWorkspaceFile> {
+    const agent = this.#agentForFile(agentId);
+    return resolveWorkspaceFile(agent, inputPath, { allowOutside: !workspaceAccessEnforced(agent) });
+  }
+
+  #agentForFile(agentId: string): AgentSummary {
     const agent = this.#store.list().find((candidate) => candidate.id === agentId);
     if (!agent) throw new Error(sourceText("error.agent.unknown", { id: agentId }));
-    return resolveWorkspaceFile(agent, inputPath);
+    return agent;
   }
 
   deleteAgent(agentId: string): Promise<void> {
@@ -1575,6 +1620,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
   searchConversationMessages(query: string, agentId?: string, cursor?: string, limit?: number): ConversationSearchPage {
     return this.#reader.search(query, agentId, cursor, limit);
+  }
+
+  searchConversationFiles(query: string, cursor?: string, limit?: number): ConversationFileSearchPage {
+    return this.#reader.searchFiles(query, cursor, limit);
   }
 
   listConversationReads(
@@ -1793,7 +1842,19 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
   #emit(event: AgentEvent): void {
     recordAgentRestartActivity(event);
-    if (this.channels?.event(event)) return;
+    if (this.channels?.event(event) || this.messaging?.event(event)) return;
     this.emit("event", event);
+  }
+
+  /** Removes live provider state for an execution thread before its durable rows are deleted. */
+  async #forgetExecutionThread(threadId: string): Promise<void> {
+    const sessions = this.#store.database.listProviderSessions(threadId);
+    for (const session of sessions) await this.#threads.deleteProviderSessionFiles(session.externalSessionId);
+    for (const session of sessions) {
+      this.#conversation.unbindThread(session.externalSessionId);
+      this.#conversation.unloadThread(session.externalSessionId);
+      this.#compaction.forgetThread(session.externalSessionId);
+    }
+    this.#conversation.forgetExecutionThread(threadId);
   }
 }

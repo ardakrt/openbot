@@ -1,6 +1,7 @@
 export * from "./acp-agent-presets";
 export * from "./agent-providers";
 export * from "./app-language";
+export * from "./app-logo-color";
 export * from "./ipc-agent-admin";
 export * from "./ipc-agent-analytics";
 export * from "./ipc-agent-events";
@@ -35,6 +36,7 @@ export * from "./ipc-host-update";
 export * from "./ipc-hosted-sites";
 export * from "./ipc-marketplace-agents";
 export * from "./ipc-mcp-servers";
+export * from "./ipc-messaging";
 export * from "./ipc-notifications";
 export * from "./ipc-provider-admin";
 export * from "./ipc-provider-detection";

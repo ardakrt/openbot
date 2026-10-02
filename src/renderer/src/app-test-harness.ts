@@ -102,6 +102,23 @@ const CONNECTING_STATUS: Record<AgentProviderId, AgentStatus> = {
     message: null,
     fullAccess: true,
   },
+  cursor: {
+    phase: "blocked",
+    cliVersion: "2026.09.28-64d2043",
+    auth: { kind: "unknown" },
+    providers: [
+      {
+        id: "cursor",
+        state: "sign-in-required",
+        connectionState: "connecting",
+        version: "2026.09.28-64d2043",
+        message: null,
+      },
+    ],
+    capabilities: { chat: "unavailable", browser: "ready", computerUse: "unavailable" },
+    message: null,
+    fullAccess: true,
+  },
   acp: {
     phase: "blocked",
     cliVersion: null,
@@ -556,6 +573,7 @@ export function installOpenbotStub(): void {
       setPreference: vi.fn(async (preference) => ({ ...preference })),
       publishPresentation: vi.fn().mockResolvedValue(undefined),
       getPresentation: vi.fn().mockResolvedValue(null),
+      getBuiltInDisplayGeometry: vi.fn().mockResolvedValue({ width: 192, height: 32 }),
       performAction: vi.fn().mockResolvedValue(undefined),
       performHaptic: vi.fn().mockResolvedValue(undefined),
       onAction: vi.fn(dynamicIslandActionBridge.subscribe),
@@ -577,7 +595,7 @@ export function installOpenbotStub(): void {
     }),
     billing: stubGroup(IPC_ENDPOINTS.billing, "billing", {}),
     hostedServers: stubGroup(IPC_ENDPOINTS.hostedServers, "hostedServers", {
-      list: vi.fn().mockResolvedValue({ available: false, servers: [] }),
+      list: vi.fn().mockResolvedValue({ available: false, servers: [], maxServers: null }),
     }),
     marketplaceAgents: stubGroup(IPC_ENDPOINTS.marketplaceAgents, "marketplaceAgents", {}),
     agentTemplates: stubGroup(IPC_ENDPOINTS.agentTemplates, "agentTemplates", {
@@ -823,6 +841,7 @@ export function installOpenbotStub(): void {
         };
       }),
       searchConversationMessages: vi.fn().mockResolvedValue({ results: [], total: 0, nextCursor: null }),
+      searchConversationFiles: vi.fn().mockResolvedValue({ results: [], nextCursor: null }),
       listConversationReads: vi.fn().mockResolvedValue({}),
       markConversationRead: vi.fn().mockImplementation(async (input) => ({
         unreadCount: 0,
@@ -1124,7 +1143,7 @@ export function installOpenbotStub(): void {
     customAgents: stubGroup(IPC_ENDPOINTS.customAgents, "customAgents", {
       list: vi.fn().mockResolvedValue([]),
     }),
-    // Onboarding and the AI providers tab scan on their own, so a scan finds nothing by default.
+    // Onboarding and the Providers section of Server settings scan on their own, so a scan finds nothing by default.
     providerDetection: stubGroup(IPC_ENDPOINTS.providerDetection, "providerDetection", {
       getSettings: vi.fn().mockResolvedValue({ enabled: true, addresses: [], folders: [], hiddenIds: [] }),
       scanModelServers: vi.fn().mockResolvedValue([]),
@@ -1132,6 +1151,7 @@ export function installOpenbotStub(): void {
     }),
     providerAdmin: stubGroup(IPC_ENDPOINTS.providerAdmin, "providerAdmin", {}),
     hostAdmin: stubGroup(IPC_ENDPOINTS.hostAdmin, "hostAdmin", {}),
+    messaging: stubGroup(IPC_ENDPOINTS.messaging, "messaging", {}),
     // `providerRuntimes` stays out: the renderer shows the sign-in and Refresh flow when it is
     // absent, and these tests cover that flow. A stub member switches every screen to downloads.
   } satisfies Omit<OpenBotDesktopApi, "providerRuntimes">;
