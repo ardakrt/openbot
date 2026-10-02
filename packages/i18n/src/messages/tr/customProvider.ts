@@ -1,4 +1,4 @@
-﻿import type { PartialTranslation } from "../../message";
+import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/customProvider";
 
 export const messages = {
@@ -111,7 +111,7 @@ export const messages = {
   "customProvider.detected.scanAgain": "Tekrar tara",
   "customProvider.detected.empty": "OpenBot yerel bir model sunucusu veya ACP ajanı bulamadı.",
   "customProvider.detected.add": "Ekle",
-  "customProvider.detected.addLabel": "{name} ekle",
+  "customProvider.detected.addLabel": "{name} sağlayıcısını ekle",
   "customProvider.detected.added": "Eklendi",
   "customProvider.detected.nameVersion": "{name} {version}",
   "customProvider.detected.modelsDetail": {
@@ -120,8 +120,8 @@ export const messages = {
   },
   "customProvider.detected.agentDetail": "ACP ajanı · {location}",
   "customProvider.detected.edit": "Düzenle",
-  "customProvider.detected.editLabel": "{name} düzenle",
-  "customProvider.detected.hide": "{name} gizle",
+  "customProvider.detected.editLabel": "{name} sağlayıcısını düzenle",
+  "customProvider.detected.hide": "{name} sağlayıcısını gizle",
   "customProvider.detected.showHidden": "Gizlenenleri göster ({count})",
 
   // Taramanın baktığı yer. Varsayılan adresler ve PATH her zaman bunun bir parçasıdır.
@@ -195,8 +195,8 @@ export const messages = {
     one: "1 değişken",
     other: "{count} değişken",
   },
-  "customProvider.agents.editLabel": "{name} düzenle",
-  "customProvider.agents.deleteLabel": "{name} sil",
+  "customProvider.agents.editLabel": "{name} ajanını düzenle",
+  "customProvider.agents.deleteLabel": "{name} ajanını sil",
   "customProvider.agents.confirmDescription":
     "Kayıtlı değişkenleri atılır ve bunu kullanan her ajan varsayılan bir modele geçer.",
   "customProvider.agents.saveFailed": "OpenBot bu ajanı kaydedemedi.",
@@ -214,7 +214,7 @@ export const messages = {
   "customProvider.list.empty": "Henüz özel uç nokta yok.",
   "customProvider.list.label": "Özel uç noktalar",
   "customProvider.list.apiKeySaved": "API anahtarı kaydedildi",
-  "customProvider.list.deleteLabel": "{name} sil",
+  "customProvider.list.deleteLabel": "{name} sağlayıcısını sil",
   "customProvider.list.confirmTitle": "{name} kaldırılsın mı?",
   "customProvider.list.confirmDescription":
     "API anahtarı atılır, modelleri seçiciden kaybolur ve bunu kullanan her ajan varsayılan bir modele geri döner.",

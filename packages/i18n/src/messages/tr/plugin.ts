@@ -1,4 +1,4 @@
-﻿import type { PartialTranslation } from "../../message";
+import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/plugin";
 
 export const messages = {
@@ -7,11 +7,9 @@ export const messages = {
   "plugin.link.privacyPolicy": "Gizlilik Politikası",
   "plugin.link.terms": "Hizmet Şartları",
   "plugin.copyLink": "Bağlantıyı kopyala",
-  "plugin.install": "Eklentiyi yükle",
-  "plugin.uninstall": "Eklentiyi kaldır",
-  "plugin.askPrompt": "{name} ajanına sor: {prompt}",
+  "plugin.askPrompt": "{name} eklentisine sor: {prompt}",
   "plugin.section.apps": "Uygulamalar",
-  "plugin.section.skills": "Yetenekler",
+  "plugin.section.skills": "Beceriler",
   "plugin.section.information": "Bilgiler",
   "plugin.info.developer": "Geliştirici",
   "plugin.info.category": "Kategori",
@@ -26,6 +24,6 @@ export const messages = {
   "plugin.uninstallDialog.appsTitle": "Bu ana makineden kaldırılan uygulamalar",
   "plugin.uninstallDialog.appsNote":
     "Araçları artık kullanılamaz ve OpenBot'un onlar için sakladığı oturum bilgileri unutulur.",
-  "plugin.uninstallDialog.skillsLabel": "Kaldırılacak yetenekler, {number}",
-  "plugin.uninstallDialog.skillsTitle": "{agentName} ajanından kaldırılan yetenekler",
+  "plugin.uninstallDialog.skillsLabel": "Kaldırılacak beceriler, {number}",
+  "plugin.uninstallDialog.skillsTitle": "{agentName} ajanından kaldırılan beceriler",
 } as const satisfies PartialTranslation<typeof source>;

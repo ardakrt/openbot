@@ -1,28 +1,28 @@
-﻿import type { PartialTranslation } from "../../message";
+import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/import";
 
 export const messages = {
   "import.count.agent": { one: "{count} ajan", other: "{count} ajan" },
   "import.count.channel": { one: "{count} kanal", other: "{count} kanal" },
-  "import.count.skill": { one: "{count} yetenek", other: "{count} yetenek" },
+  "import.count.skill": { one: "{count} beceri", other: "{count} beceri" },
   "import.count.routine": { one: "{count} rutin", other: "{count} rutin" },
   "import.count.memory": { one: "{count} hafıza", other: "{count} hafıza" },
   "import.count.file": { one: "{count} dosya", other: "{count} dosya" },
   "import.guide.title": "Ajanlarınızı Grok Bot'tan taşıyın",
   "import.guide.lede":
-    "Grok Bot'taki bir dışa aktarma ajanı; isimleri, talimatları, avatarları, yetenekleri, rutinleri, hafızaları ve dahil ettiğiniz dosyaları tek bir .zip dosyasına paketler.",
+    "Grok Bot'taki bir dışa aktarma ajanı; isimleri, talimatları, avatarları, becerileri, rutinleri, hafızaları ve dahil ettiğiniz dosyaları tek bir .zip dosyasına paketler.",
   "import.guide.openFailed": "Dışa aktarma açılamadı",
   "import.guide.step1": "Dışa aktarma ajanını Grok Bot'a ekleyin",
   "import.guide.setupLabel": "Dışa aktarma ajanı nasıl eklenir",
   "import.guide.setupAgent": "Ajanı yükle",
   "import.guide.setupSkill": "Kendiniz kurun",
-  "import.guide.agentMeta": "Grok Bot ajanı · dışa aktarma yeteneğine sahip",
+  "import.guide.agentMeta": "Grok Bot ajanı · dışa aktarma becerisine sahip",
   "import.guide.openAgent": "Dışa aktarma ajanını aç",
   "import.guide.agentNote": "Hazır ajanı Grok Bot sayfasından yükleyin. Dışa aktarma onu hariç tutar.",
-  "import.guide.skillCopied": "Yetenek kopyalandı",
+  "import.guide.skillCopied": "Beceri kopyalandı",
   "import.guide.saveFile": "Dosyayı kaydet…",
   "import.guide.skillNote":
-    "Bu yeteneği Grok Bot'ta yalnızca dışa aktarma için kullanılan yeni bir ajana ekleyin. Dışa aktarma onu hariç tutar.",
+    "Bu beceriyi Grok Bot'ta yalnızca dışa aktarma için kullanılan yeni bir ajana ekleyin. Dışa aktarma onu hariç tutar.",
   "import.guide.step2": "Ona bu mesajı gönderin",
   "import.guide.copyMessage": "Mesajı kopyala",
   "import.guide.messageCopied": "Mesaj kopyalandı",
@@ -45,7 +45,7 @@ export const messages = {
   "import.review.agents": "Ajanlar",
   "import.review.channels": "Kanallar",
   "import.review.selected": "{selected} / {total} seçildi",
-  "import.review.importItem": "{name} içe aktar",
+  "import.review.importItem": "{name} öğesini içe aktar",
   "import.review.importing": "İçe aktarılıyor…",
   "import.review.channelNeedsMember": "İçe aktarmak için en az bir ajanını seçin.",
   "import.review.channelWithout": "{names} olmadan içe aktarılır.",
@@ -60,7 +60,7 @@ export const messages = {
   "import.result.notImported": "{items} içe aktarılamadı.",
   "import.result.notImportedBoth": "{agents} ve {channels} içe aktarılamadı.",
   "import.result.imported": "İçe aktarıldı",
-  "import.result.open": "{name} Aç",
+  "import.result.open": "{name} ajanını aç",
   "import.result.channel": "Kanal",
   "import.result.notImportedTitle": "İçe aktarılmadı",
   "import.result.warnings": "Bazı ögeler taşınmadı",

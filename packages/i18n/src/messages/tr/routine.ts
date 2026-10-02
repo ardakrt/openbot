@@ -14,7 +14,7 @@ export const messages = {
   "routine.clock.pm": "ÖS",
   "routine.clock.withMeridiem": "{time} {meridiem}",
 
-  "routine.summary.hourly": "Her saat başı saat :{minute} geçe",
+  "routine.summary.hourly": "Her saat, {minute}. dakikada",
   "routine.summary.daily": "Her gün saat {time}",
   "routine.summary.dailySentence": "Her gün saat {time}",
   "routine.summary.weekdays": "Hafta içi saat {time}",
@@ -94,8 +94,8 @@ export const messages = {
 
   "routine.picker.schedule": "Zamanlama",
   "routine.picker.frequency": "Sıklık",
-  "routine.picker.on": "gününde",
-  "routine.picker.at": "saatinde",
+  "routine.picker.on": "Gün:",
+  "routine.picker.at": "saat",
   "routine.picker.time": "Zaman",
   "routine.picker.dayOfMonth": "Ayın günü",
   "routine.picker.cronExpression": "Cron ifadesi",
@@ -105,7 +105,7 @@ export const messages = {
   "routine.history.title": "Çalıştırma geçmişi",
   "routine.history.empty": "Henüz çalıştırma yok.",
   "routine.history.manualRun": "Manuel · {time}",
-  "routine.history.openRun": "Sohbette {run} aç",
+  "routine.history.openRun": "{run} çalıştırmasını sohbette aç",
   "routine.history.today": "Bugün saat {time}",
   "routine.history.yesterday": "Dün saat {time}",
 

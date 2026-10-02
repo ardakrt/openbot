@@ -1,4 +1,4 @@
-﻿import type { PartialTranslation } from "../../message";
+import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/connector";
 
 export const messages = {

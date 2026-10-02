@@ -5,7 +5,7 @@ export const messages = {
   "mcp.connect.unreachable": "O sunucuya ulaşılamadı.",
   "mcp.connect.title": "{name} Bağlantısını Kur",
   "mcp.connect.notConnected": "Bağlı değil",
-  "mcp.connect.close": "{name} bağlantısını kapat",
+  "mcp.connect.close": "{name} bağlantı penceresini kapat",
   "mcp.connect.getKey": "Bir anahtar al",
   "mcp.connect.keyDescription":
     "{name} hesabınızdan bir kimlik bilgisi yapıştırın. OpenBot bununla bağlanır ve onu {host} üzerinde saklar.",
@@ -48,7 +48,7 @@ export const messages = {
     "Model Context Protocol sunucuları bu sunucunun ajanlarına ek araçlar sağlar. Claude ve Codex ajanları yalnızca bu listedeki sunucuları alır; OpenCode ve Grok ajanları kendi yapılandırma dosyalarından da sunucuları başlatabilir.",
   "mcp.panel.connectCustom": "Özel bir MCP bağla",
   "mcp.panel.empty": "Henüz MCP sunucusu yok.",
-  "mcp.panel.enable": "{name} etkinleştir",
+  "mcp.panel.enable": "{name} sunucusunu etkinleştir",
   "mcp.panel.detailsTitle": "Ayrıntılar",
   "mcp.panel.detailsDescription": "Bu sunucuyu adlandırın ve OpenBot'un ona nasıl ulaşacağını seçin.",
   "mcp.panel.transport": "Aktarım",

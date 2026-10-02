@@ -48,7 +48,7 @@ export const messages = {
   "mobile.server.settings.members": "Üyeler",
   "mobile.server.settings.refreshing": "Yenileniyor…",
   "mobile.server.settings.refresh": "Bağlantıyı yenile",
-  "mobile.server.settings.leaveTitle": "{name} sunucusundan ayrıl?",
+  "mobile.server.settings.leaveTitle": "{name} sunucusundan ayrılmak istiyor musunuz?",
   "mobile.server.settings.leaveBody": "Tekrar katılmak için başka bir davete ihtiyacınız olacak.",
   "mobile.server.settings.leave": "Sunucudan ayrıl",
   "mobile.server.settings.name": "Sunucu adı",
@@ -82,7 +82,7 @@ export const messages = {
   "mobile.server.members.create": "Davet bağlantısı oluştur",
   "mobile.server.members.permanentLimit": "Yenisini oluşturmadan önce kalıcı bir davet bağlantısını iptal edin.",
   "mobile.server.members.full":
-    "Bu sunucu en fazla {limit} üyeye sahip olabilir. Yeni bir kişiyi davet etmek için bir üyeyi kaldırın.",
+    "Bu sunucu {limit} üye sınırına ulaştı. Yeni bir kişiyi davet etmek için bir üyeyi kaldırın.",
   "mobile.server.members.inviteUsed": "Davet kabul edildi. Üye bu sunucuya katıldı.",
   "mobile.server.members.inviteSent": "Davet {email} adresine gönderildi.",
   "mobile.server.members.permanentCreated":

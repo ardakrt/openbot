@@ -1,11 +1,11 @@
-﻿import type { PartialTranslation } from "../../message";
+import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/webClient";
 
 export const messages = {
   "webClient.loading": "OpenBot yükleniyor…",
   "webClient.loadingLine.wake": "Ajanlar uyandırılıyor…",
   "webClient.loadingLine.coffee": "Ajanlara kahve dolduruluyor…",
-  "webClient.loadingLine.tokens": "Jetonlar parmakla sayılıyor…",
+  "webClient.loadingLine.tokens": "Token'lar parmakla sayılıyor…",
   "webClient.loadingLine.prompts": "İstemler çözülüyor…",
   "webClient.loadingLine.sleepy": "Uykulu ajana nazikçe soruluyor…",
   "webClient.loadingLine.almost": "Neredeyse bitti. Muhtemelen.",
@@ -52,7 +52,7 @@ export const messages = {
   "webClient.error.accessEnded": "Bu ana makineye erişim sona erdi.",
   "webClient.error.hostsFailed": "Ana makineleriniz yüklenemedi.",
   "webClient.error.enterInvitation": "Bir davet bağlantısı girin.",
-  "webClient.error.invitationOffline": "Davet kabul edildi, ancak ana makine çevrimdışı. Tekrar deneyin.",
+  "webClient.error.invitationOffline": "Davet kabul edildi, ancak ana makine çevrim dışı. Tekrar deneyin.",
   "webClient.error.otherConversation": "Ana makine başka bir konuşma döndürdü.",
   "webClient.error.messageTooLong": "Mesaj çok uzun.",
   "webClient.error.deliveryUnconfirmed":
