@@ -60,6 +60,8 @@ export const messages = {
   "error.provider.downloadSize": "ランタイムのダウンロードのサイズが予期しないものです。",
   "error.provider.downloadIntegrity": "ランタイムのダウンロードが整合性チェックに失敗しました。",
   "error.provider.runtimeReplacing": "別のインスタンスがランタイムを置き換えているため、インストールできませんでした。",
+  "error.provider.runtimeFilesInUse":
+    "別のプログラムがランタイムのファイルを開いているため、インストールできませんでした。そのプログラムを閉じてから、もう一度お試しください。",
   "error.provider.metadataHttp": "ランタイムのメタデータのダウンロードが HTTP {status} で失敗しました。",
   "error.provider.metadataIntegrity": "ランタイムのメタデータが整合性チェックに失敗しました。",
   "error.provider.diskSpace": "このプロバイダーに必要な空きディスク容量が足りません。",
@@ -138,6 +140,10 @@ export const messages = {
   "error.provider.bunVersionUnreadable": "Bun ランタイムのバージョンを読み取れません。",
   "error.provider.connectBeforeProfile": "プロフィールを生成する前に、選択したプロバイダーに接続してください。",
   "error.provider.cliNotReady": "{provider} CLI の準備ができていないか、サインインしていません。",
+  "error.provider.cliTimedOut":
+    "{provider} が時間内に応答しませんでした。コンピューターの負荷が高い可能性があります。OpenBot が再試行します。",
+  "error.provider.cliTimedOutRefresh":
+    "{provider} が時間内に応答しませんでした。コンピューターの負荷が高い可能性があります。プロバイダーを更新して再試行してください。",
   "error.provider.noCodeSignIn": "{provider} にはコードでサインインできません。",
   "error.provider.codeLoginNoLink": "プロバイダーがサインインのリンクを表示しませんでした。もう一度お試しください。",
   "error.provider.codeLoginNotWaiting": "コードを待っているサインインはありません。サインインをやり直してください。",

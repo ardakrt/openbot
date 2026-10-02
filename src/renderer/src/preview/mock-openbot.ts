@@ -102,6 +102,7 @@ import { createMockChannels } from "./mock-channels";
 import { createMockGitHubConnector } from "./mock-github-connector";
 import { createMockHostUpdate, type MockHostUpdateOptions } from "./mock-host-update";
 import { createMockHostedServers } from "./mock-hosted-servers";
+import { createMockMessaging } from "./mock-messaging";
 import { createMockProviderRuntimes, type MockProviderRuntimeOptions } from "./mock-provider-runtimes";
 import { applySidebarLayoutAction } from "./mock-sidebar-layout";
 import { createMockSkills, type MockSkillsOptions } from "./mock-skills";
@@ -473,6 +474,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         dynamicIslandPresentation = clone(presentation);
       },
       getPresentation: async () => clone(dynamicIslandPresentation),
+      getBuiltInDisplayGeometry: async () => ({ width: 192, height: 32 }),
       onPreference: () => () => undefined,
       onPresentation: () => () => undefined,
       onGeometry: () => () => undefined,
@@ -679,6 +681,9 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         return clone(detectionSettings);
       },
     },
+    // Preview has one host, so every server answers for the same agents.
+    // The Slack Orchestrator of the preview is its first agent.
+    messaging: createMockMessaging(() => agents[0]?.id ?? "preview-agent"),
     // Preview has one host, so every server answers from the same providers as this computer.
     providerAdmin: {
       // A host signs Claude in with a code its page shows, which the user pastes back.
@@ -1279,6 +1284,26 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
             .map((message) => ({ agentId: agent.id, message: clone(message) })),
         );
         return { results: results.slice(0, input.limit ?? 100), total: results.length, nextCursor: null };
+      },
+      searchConversationFiles: async (input) => {
+        const query = input.query.trim().toLocaleLowerCase();
+        const results = agents.flatMap((agent) =>
+          getSnapshot(agent.id).messages.flatMap((message) =>
+            (message.attachments ?? [])
+              .filter((attachment) => attachment.name.toLocaleLowerCase().includes(query))
+              .map((attachment) => ({
+                agentId: agent.id,
+                messageId: message.id,
+                createdAt: message.createdAt,
+                attachment: clone(attachment),
+              })),
+          ),
+        );
+        // Newest first, as the backend returns them.
+        results.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        const offset = Number(input.cursor ?? 0);
+        const end = offset + (input.limit ?? 50);
+        return { results: results.slice(offset, end), nextCursor: end < results.length ? String(end) : null };
       },
       listConversationReads: async () => ({}),
       markConversationRead: async (input) => ({

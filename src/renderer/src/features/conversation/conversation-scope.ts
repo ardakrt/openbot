@@ -310,6 +310,7 @@ export function createConversationViewScope(props: ConversationProps) {
     clearNewMessages,
     messageVirtualizer,
     timelineMessages,
+    unreadBoundaryMessageId,
     updateScrollFade,
     updateVirtualScrollMargin,
     updateUnreadDividerVisibility,
@@ -824,7 +825,8 @@ export function createConversationViewScope(props: ConversationProps) {
     ({ request, agentId }) => {
       if (!request || agentId !== request.agentId || request.nonce === lastHandledSettingsRequestNonce) return;
       lastHandledSettingsRequestNonce = request.nonce;
-      setActiveRightPanel("settings", agentId);
+      if (request.routine) openRoutineSettings(request.routine);
+      else setActiveRightPanel("settings", agentId);
     },
   );
 
@@ -1110,6 +1112,7 @@ export function createConversationViewScope(props: ConversationProps) {
     markingRead,
     messageVirtualizer,
     timelineMessages,
+    unreadBoundaryMessageId,
     moveChatSearch,
     newMessageCount,
     openAttachmentPicker,

@@ -135,6 +135,7 @@ import type {
 } from "./ipc-channel-routines";
 import type { Channel, ChannelCommand, ChannelPage, ChannelReadInput, ChannelSummary } from "./ipc-chat-channels";
 import type {
+  ConversationFileSearchPage,
   ConversationPage,
   ConversationReadState,
   ConversationSearchPage,
@@ -142,6 +143,7 @@ import type {
   MarkConversationReadInput,
   ReadConversationPageInput,
   RespondToPromptInput,
+  SearchConversationFilesInput,
   SearchConversationMessagesInput,
   SendMessageInput,
   SetMessageReactionInput,
@@ -197,6 +199,13 @@ import type {
   SetMcpServerEnabledInput,
   TestMcpServerInput,
 } from "./ipc-mcp-servers";
+import type {
+  AddSlackOrchestratorInput,
+  AddSlackOrchestratorResult,
+  SetSlackEnabledInput,
+  SlackOverview,
+  SlackWorkspaceInput,
+} from "./ipc-messaging";
 import type { NotificationOpenedEvent, NotificationPreference } from "./ipc-notifications";
 import type {
   DetectedModelServer,
@@ -467,6 +476,10 @@ export const IPC_ENDPOINTS = {
     presentation: event<DynamicIslandPresentation>()("dynamic-island:presentation"),
     preference: event<DynamicIslandPreference>()("dynamic-island:preference"),
     geometry: event<DynamicIslandGeometry>()("dynamic-island:geometry"),
+    /** The notch of the built-in display, or null when it has none. The Settings preview draws it. */
+    getBuiltInDisplayGeometry: request<undefined, DynamicIslandGeometry>()(
+      "dynamic-island:get-built-in-display-geometry",
+    ),
     performAction: request<DynamicIslandAction, void>()("dynamic-island:perform-action"),
     performHaptic: request<undefined, void>()("dynamic-island:perform-haptic"),
     action: event<DynamicIslandAction>()("dynamic-island:action"),
@@ -557,6 +570,19 @@ export const IPC_ENDPOINTS = {
     ),
     deleteCustomProvider: scopedRequest<DeleteCustomProviderInput, CustomProviderResult, "required">()(
       "provider-admin:delete-custom-provider",
+    ),
+  },
+  // The Slack workspaces where this computer's agents answer. Only the host's own desktop can use
+  // these: a connect opens a Slack page in this computer's browser, and the page returns to this
+  // computer's `openbot://` link. A token only travels towards the host; no result carries one.
+  messaging: {
+    getSlackOverview: request<undefined, SlackOverview>()("messaging:get-slack-overview"),
+    connectSlackWorkspace: request<undefined, void>()("messaging:connect-slack-workspace"),
+    disconnectSlackWorkspace: request<SlackWorkspaceInput, void>()("messaging:disconnect-slack-workspace"),
+    reconnectSlackWorkspace: request<SlackWorkspaceInput, void>()("messaging:reconnect-slack-workspace"),
+    setSlackEnabled: request<SetSlackEnabledInput, void>()("messaging:set-slack-enabled"),
+    addSlackOrchestrator: request<AddSlackOrchestratorInput, AddSlackOrchestratorResult>()(
+      "messaging:add-slack-orchestrator",
     ),
   },
   // The server name, logo and app update of one server's host. `host.updateIdentity` and `update`
@@ -691,6 +717,10 @@ export const IPC_ENDPOINTS = {
     readConversationPage: scopedRequest<ReadConversationPageInput, ConversationPage>()("agent:read-conversation-page"),
     searchConversationMessages: scopedRequest<SearchConversationMessagesInput, ConversationSearchPage>()(
       "agent:search-conversation-messages",
+    ),
+    // Local only: a joined server has no file search route, so the renderer asks only this computer.
+    searchConversationFiles: request<SearchConversationFilesInput, ConversationFileSearchPage>()(
+      "agent:search-conversation-files",
     ),
     listConversationReads: scopedQuery<Record<string, ConversationReadState>>()("agent:list-conversation-reads"),
     markConversationRead: scopedRequest<MarkConversationReadInput, ConversationReadState>()(

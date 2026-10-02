@@ -34,7 +34,7 @@ import {
   toast,
   UsersRound,
 } from "@openbot/ui";
-import { GitHubConnectorPanel } from "@openbot/ui/features/settings/GitHubConnectorPanel";
+import type { AgentProfile } from "@openbot/ui/data";
 import { SaveBarDock, SettingsDialogShell } from "@openbot/ui/features/settings/SettingsDialogShell";
 import { SettingsHostedSitesTab } from "@openbot/ui/features/settings/SettingsHostedSitesTab";
 import {
@@ -43,7 +43,9 @@ import {
 } from "@openbot/ui/features/settings/stores/hosted-sites-store";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createSignal, onCleanup, Show, untrack } from "solid-js";
+import { ConnectorsPanel } from "../connectors/ConnectorsPanel";
 import type { GitHubConnectorController } from "../connectors/github-connector";
+import type { SlackConnectorController } from "../connectors/slack-connector";
 import { type ServerStorageOptions, ServerStoragePanel } from "../files/ServerStoragePanel";
 import { type HostProviderSettings, HostProviderSettingsPanel } from "../settings/ProviderSettingsSection";
 import type { McpServerConfig, McpTestResult } from "./mcp-servers";
@@ -122,20 +124,29 @@ export interface ServerSettingsModalProps {
    */
   hostedSites?: ServerHostedSitesOptions | undefined;
   /**
-   * The Providers section appears only when a caller supplies this. The desktop app passes nothing:
-   * its own Settings holds the providers of every host it administers.
+   * The Providers section: this computer, or a remote host with `providers-v1` that this account
+   * administers. A member gets no section.
    */
   providers?: HostProviderSettings | undefined;
+  /**
+   * For a server that the window has not selected. The provider state belongs to the selected server,
+   * so the Providers section shows a note and this action in place of the list.
+   */
+  onSwitchToManageProviders?: (() => void) | undefined;
   /**
    * The Import section appears only when a caller supplies this: the local server, or a remote host
    * with `agent-import-v1`. Any member can import.
    */
   agentImport?: ServerImportOptions | undefined;
   /**
-   * The Connectors section appears only when a caller supplies this: the GitHub connection belongs
-   * to this computer, so a remote server and a build without a GitHub App pass nothing.
+   * The Connectors section appears only when a caller supplies one of these: the GitHub connection
+   * and the Slack apps belong to this computer, so a remote server passes neither, and a build
+   * without a GitHub App passes no GitHub.
    */
   githubConnector?: GitHubConnectorController | undefined;
+  slackConnector?: SlackConnectorController | undefined;
+  /** This computer's agents, for the Slack page. */
+  connectorAgents?: AgentProfile[] | undefined;
   /**
    * The Updates section appears only when a caller supplies this: a remote host with
    * `host-update-v1` that this member administers.
@@ -304,6 +315,13 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
     () => (props.open ? availableInitialSection() : null),
     (requested) => {
       if (requested) setSection(requested);
+    },
+  );
+
+  createEffect(
+    () => props.open && section() === "providers" && props.providers !== undefined,
+    (visible) => {
+      if (visible) untrack(() => props.providers?.onShown?.());
     },
   );
 
@@ -514,7 +532,7 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
                 <span>{t(sections.sites.title)}</span>
               </Tabs.Trigger>
             </Show>
-            <Show when={props.providers}>
+            <Show when={props.providers || props.onSwitchToManageProviders}>
               <Tabs.Trigger class="settings-modal-nav-item" value="providers">
                 <Sparkles aria-hidden="true" />
                 <span>{t(sections.providers.title)}</span>
@@ -532,7 +550,7 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
                 <span>{t(sections.import.title)}</span>
               </Tabs.Trigger>
             </Show>
-            <Show when={props.githubConnector}>
+            <Show when={props.githubConnector || props.slackConnector}>
               <Tabs.Trigger class="settings-modal-nav-item" value="connectors">
                 <Plug aria-hidden="true" />
                 <span>{t(sections.connectors.title)}</span>
@@ -594,12 +612,37 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
             </Tabs.Content>
           )}
         </Show>
-        <Show when={props.providers}>
-          {(providers) => (
-            <Tabs.Content value="providers" class="settings-modal-tab-panel server-settings-panel" data-tab="providers">
-              <HostProviderSettingsPanel {...providers()} hostName={props.server.name} selectMount={modalElement()} />
-            </Tabs.Content>
-          )}
+        <Show when={props.providers || props.onSwitchToManageProviders}>
+          <Tabs.Content value="providers" class="settings-modal-tab-panel server-settings-panel" data-tab="providers">
+            <Show
+              when={props.providers}
+              fallback={
+                <Alert>
+                  <AlertIcon>
+                    <Sparkles />
+                  </AlertIcon>
+                  <AlertContent>
+                    <AlertDescription>
+                      {t("server.settings.providersSwitchNote", { name: props.server.name })}
+                    </AlertDescription>
+                  </AlertContent>
+                  <AlertActions>
+                    <Button type="button" size="sm" onClick={() => props.onSwitchToManageProviders?.()}>
+                      {t("server.settings.providersSwitch")}
+                    </Button>
+                  </AlertActions>
+                </Alert>
+              }
+            >
+              {(providers) => (
+                <HostProviderSettingsPanel
+                  {...providers()}
+                  hostName={local() ? undefined : props.server.name}
+                  selectMount={modalElement()}
+                />
+              )}
+            </Show>
+          </Tabs.Content>
         </Show>
         <Show when={props.hostUpdate}>
           {(hostUpdate) => (
@@ -623,26 +666,14 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
             </Tabs.Content>
           )}
         </Show>
-        <Show when={props.githubConnector}>
-          {(github) => (
-            <Tabs.Content
-              value="connectors"
-              class="settings-modal-tab-panel server-settings-panel"
-              data-tab="connectors"
-            >
-              <GitHubConnectorPanel
-                status={github().status()}
-                busy={github().busy()}
-                repositories={github().repositories()}
-                repositoriesError={github().repositoriesError()}
-                onConnect={github().connect}
-                onCancel={github().cancel}
-                onDisconnect={github().disconnect}
-                onOpenVerification={github().openVerification}
-                onOpenInstall={github().openInstall}
-              />
-            </Tabs.Content>
-          )}
+        <Show when={props.githubConnector || props.slackConnector}>
+          <Tabs.Content value="connectors" class="settings-modal-tab-panel server-settings-panel" data-tab="connectors">
+            <ConnectorsPanel
+              github={props.githubConnector}
+              slack={props.slackConnector}
+              agents={props.connectorAgents ?? []}
+            />
+          </Tabs.Content>
         </Show>
       </SettingsDialogShell>
 
