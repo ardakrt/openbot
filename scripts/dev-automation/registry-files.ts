@@ -47,32 +47,47 @@ export function assertOwnerOnlyDirectory(
   }
 }
 
+// Well-known SID of BUILTIN\Administrators, which owns what an elevated shell
+// creates for this user.
+const WINDOWS_ADMINISTRATORS_SID = "S-1-5-32-544";
+
+// The Windows form of the uid check. SIDs, not account names: names are
+// localized. The path goes through the environment, so PowerShell never parses
+// it. An owner that cannot be read fails closed, like a foreign one.
 function assertWindowsDirectoryOwner(directory: string): void {
+  let owner = "";
+  let currentUser = "";
   try {
-    const owner = execFileSync(
+    [owner = "", currentUser = ""] = execFileSync(
       "powershell.exe",
       [
         "-NoProfile",
         "-NonInteractive",
         "-Command",
-        `(Get-Acl -LiteralPath "${directory.replaceAll('"', '`"')}").Owner`,
+        "(Get-Acl -LiteralPath $env:OPENBOT_REGISTRY_DIRECTORY).GetOwner([System.Security.Principal.SecurityIdentifier]).Value; " +
+          "[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value",
       ],
-      { encoding: "utf8", timeout: 5_000, stdio: ["ignore", "pipe", "ignore"] },
-    ).trim();
-    const currentUser = execFileSync(
-      "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-Command", "[System.Security.Principal.WindowsIdentity]::GetCurrent().Name"],
-      { encoding: "utf8", timeout: 5_000, stdio: ["ignore", "pipe", "ignore"] },
-    ).trim();
-    const isOwner =
-      owner.toLowerCase() === currentUser.toLowerCase() || owner.toLowerCase() === "builtin\\administrators";
-    if (!isOwner) {
-      throw new Error(
-        `${directory} is owned by ${owner} instead of ${currentUser}. Remove it and start \`bun run dev\` again.`,
-      );
-    }
+      {
+        encoding: "utf8",
+        env: { ...process.env, OPENBOT_REGISTRY_DIRECTORY: directory },
+        timeout: 5_000,
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    )
+      .trim()
+      .split(/\s+/);
   } catch (error) {
-    if (error instanceof Error && error.message.includes("is owned by")) throw error;
+    throw new Error(
+      `Could not read the owner of ${directory}, so dev instances will not be published there. ` +
+        "Remove it and start `bun run dev` again.",
+      { cause: error },
+    );
+  }
+  if (!owner || !currentUser || (owner !== currentUser && owner !== WINDOWS_ADMINISTRATORS_SID)) {
+    throw new Error(
+      `${directory} is not owned by this user, so dev instances will not be published there. ` +
+        "Remove it and start `bun run dev` again.",
+    );
   }
 }
 
@@ -223,10 +238,10 @@ export function verifyRecordedProcess(
   return isRecordedProcess(entry, startedAt) ? "live" : "gone";
 }
 
-// Whether *anything* is left in the process group a detached child leads. A
-// group outlives its leader: electron-vite exits, and the Electron it started
-// keeps the renderer port. Signal 0 to the negated pid asks about the group,
-// and EPERM is a yes - the group exists and belongs to somebody else.
+// Windows has no process groups. An orphan keeps its ParentProcessId, so the
+// nearest question is whether a process the leader started still runs. Windows
+// reuses pids soon: when another process holds the pid now, only children
+// older than that process can be the leader's.
 function hasWindowsChildProcess(pid: number): boolean {
   try {
     const reported = execFileSync(
@@ -235,16 +250,23 @@ function hasWindowsChildProcess(pid: number): boolean {
         "-NoProfile",
         "-NonInteractive",
         "-Command",
-        `if (Get-CimInstance Win32_Process -Filter "ParentProcessId = ${pid}") { '1' } else { '0' }`,
+        `$parent = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}"; ` +
+          `$children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = ${pid}"); ` +
+          "if ($parent) { $children = @($children | Where-Object { $_.CreationDate -lt $parent.CreationDate }) }; " +
+          "$children.Count",
       ],
       { encoding: "utf8", timeout: 5_000, stdio: ["ignore", "pipe", "ignore"] },
     ).trim();
-    return reported === "1";
+    return Number(reported) > 0;
   } catch {
     return false;
   }
 }
 
+// Whether *anything* is left in the process group a detached child leads. A
+// group outlives its leader: electron-vite exits, and the Electron it started
+// keeps the renderer port. Signal 0 to the negated pid asks about the group,
+// and EPERM is a yes - the group exists and belongs to somebody else.
 export function isProcessGroupAlive(pid: number, platform: NodeJS.Platform = process.platform): boolean {
   if (platform === "win32") return hasWindowsChildProcess(pid);
   try {

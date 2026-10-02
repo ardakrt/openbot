@@ -2,8 +2,9 @@ import { spawn } from "node:child_process";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createOpenBotLogger } from "@openbot/logging";
+import { cliSpawnTarget } from "../src/backend/cli";
 import { withoutElectronRuntimeFlags } from "./electron-spawn-env";
-import { cliSpawnTarget, resolvePackageBin } from "./package-bin";
+import { resolvePackageBin } from "./package-bin";
 
 const logger = createOpenBotLogger("preview");
 

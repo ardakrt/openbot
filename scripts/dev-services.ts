@@ -7,6 +7,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { get as getEncryptedValue } from "@dotenvx/dotenvx";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
+import { cliSpawnTarget } from "../src/backend/cli";
 import {
   developmentInstanceIdForWorktree,
   developmentUserDataName,
@@ -30,7 +31,7 @@ import {
 import { attachSlackTunnels } from "./dev-slack-tunnels";
 import { resolveDevelopmentAppDataRoot } from "./development-state-paths";
 import { withoutElectronRuntimeFlags } from "./electron-spawn-env";
-import { cliSpawnTarget, resolvePackageBin } from "./package-bin";
+import { resolvePackageBin } from "./package-bin";
 import { prepareDevelopmentEnvironment } from "./prepare-dev-environment";
 
 const logger = createOpenBotLogger("dev-services");
@@ -110,10 +111,8 @@ export function createDevelopmentServiceSpec(
   // The parent shell may run inside an Electron harness with
   // ELECTRON_RUN_AS_NODE=1. Every spec below becomes a spawned child, and the
   // app/test-client children relaunch Electron, so the runtime flags are
+  // stripped once here rather than at each spawn.
   const childEnvironment = withoutElectronRuntimeFlags(environment);
-  if (process.platform === "win32" && !childEnvironment.APPDATA && process.env.APPDATA) {
-    childEnvironment.APPDATA = process.env.APPDATA;
-  }
   if (name === "api") {
     return {
       name,

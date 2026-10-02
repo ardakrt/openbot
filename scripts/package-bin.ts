@@ -1,6 +1,5 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { cliSpawnTarget } from "../src/backend/cli";
 
 export function resolvePackageBin(root: string, name: string): string {
   const binDir = join(root, "node_modules", ".bin");
@@ -12,5 +11,3 @@ export function resolvePackageBin(root: string, name: string): string {
   }
   return join(binDir, name);
 }
-
-export { cliSpawnTarget };

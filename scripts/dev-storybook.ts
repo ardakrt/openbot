@@ -10,6 +10,7 @@ import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
+import { cliSpawnTarget } from "../src/backend/cli";
 import { withDevPortAllocation } from "./dev-automation/port-allocation";
 import {
   conflictingDevStacks,
@@ -20,7 +21,7 @@ import {
   writeDevStackRecord,
 } from "./dev-automation/stack-registry";
 import { findAvailablePort, stopOwnedProcesses } from "./dev-services";
-import { cliSpawnTarget, resolvePackageBin } from "./package-bin";
+import { resolvePackageBin } from "./package-bin";
 
 const logger = createOpenBotLogger("dev-storybook");
 
