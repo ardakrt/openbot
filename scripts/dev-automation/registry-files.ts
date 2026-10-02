@@ -47,25 +47,38 @@ export function assertOwnerOnlyDirectory(
   }
 }
 
-// Well-known SID of BUILTIN\Administrators, which owns what an elevated shell
-// creates for this user.
+// SIDs that may own or write the registry on Windows besides this user:
+// BUILTIN\Administrators, which owns what an elevated shell creates, and
+// LocalSystem. Both are in the default %LOCALAPPDATA% ACL.
 const WINDOWS_ADMINISTRATORS_SID = "S-1-5-32-544";
+const WINDOWS_TRUSTED_WRITER_SIDS = [WINDOWS_ADMINISTRATORS_SID, "S-1-5-18"];
 
-// The Windows form of the uid check. SIDs, not account names: names are
+// Rights that let an account replace a record: write and append data, write
+// attributes, delete, change permissions, take ownership, and the generic
+// write and all bits.
+const WINDOWS_WRITE_RIGHTS = "0x500D0156";
+
+// The Windows form of the uid and mode checks: the owner, then every allow
+// entry that grants write rights. SIDs, not account names: names are
 // localized. The path goes through the environment, so PowerShell never parses
-// it. An owner that cannot be read fails closed, like a foreign one.
-function assertWindowsDirectoryOwner(directory: string): void {
-  let owner = "";
-  let currentUser = "";
+// it. An ACL that cannot be read fails closed, like a foreign one.
+function assertWindowsOwnerOnlyDirectory(directory: string): void {
+  let lines: string[];
   try {
-    [owner = "", currentUser = ""] = execFileSync(
+    lines = execFileSync(
       "powershell.exe",
       [
         "-NoProfile",
         "-NonInteractive",
         "-Command",
-        "(Get-Acl -LiteralPath $env:OPENBOT_REGISTRY_DIRECTORY).GetOwner([System.Security.Principal.SecurityIdentifier]).Value; " +
-          "[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value",
+        "$sid = [System.Security.Principal.SecurityIdentifier]; " +
+          "$acl = Get-Acl -LiteralPath $env:OPENBOT_REGISTRY_DIRECTORY; " +
+          "$acl.GetOwner($sid).Value; " +
+          "[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value; " +
+          "$acl.GetAccessRules($true, $true, $sid) | Where-Object { " +
+          "$_.AccessControlType -eq 'Allow' -and " +
+          "-not ($_.PropagationFlags -band [System.Security.AccessControl.PropagationFlags]::InheritOnly) -and " +
+          `([int]$_.FileSystemRights -band ${WINDOWS_WRITE_RIGHTS}) } | ForEach-Object { $_.IdentityReference.Value }`,
       ],
       {
         encoding: "utf8",
@@ -78,15 +91,24 @@ function assertWindowsDirectoryOwner(directory: string): void {
       .split(/\s+/);
   } catch (error) {
     throw new Error(
-      `Could not read the owner of ${directory}, so dev instances will not be published there. ` +
+      `Could not read the permissions of ${directory}, so dev instances will not be published there. ` +
         "Remove it and start `bun run dev` again.",
       { cause: error },
     );
   }
+  const [owner, currentUser, ...writers] = lines;
   if (!owner || !currentUser || (owner !== currentUser && owner !== WINDOWS_ADMINISTRATORS_SID)) {
     throw new Error(
       `${directory} is not owned by this user, so dev instances will not be published there. ` +
         "Remove it and start `bun run dev` again.",
+    );
+  }
+  const otherWriters = writers.filter((sid) => sid !== currentUser && !WINDOWS_TRUSTED_WRITER_SIDS.includes(sid));
+  if (otherWriters.length > 0) {
+    throw new Error(
+      `${directory} is writable by other accounts (${otherWriters.join(", ")}). ` +
+        "Remove it and start `bun run dev` again: a registry another account can write lets it choose " +
+        "which app an automation command drives.",
     );
   }
 }
@@ -100,7 +122,7 @@ export function assertRegistryDirectoryOwnership(directory: string): void {
           "Remove it and start `bun run dev` again.",
       );
     }
-    assertWindowsDirectoryOwner(directory);
+    assertWindowsOwnerOnlyDirectory(directory);
     return;
   }
   assertOwnerOnlyDirectory(directory, {
