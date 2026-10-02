@@ -49,9 +49,10 @@ export function assertOwnerOnlyDirectory(
 
 // SIDs that may own or write the registry on Windows besides this user:
 // BUILTIN\Administrators, which owns what an elevated shell creates, and
-// LocalSystem. Both are in the default %LOCALAPPDATA% ACL.
+// LocalSystem, both in the default %LOCALAPPDATA% ACL; and CREATOR OWNER, which
+// a record inherits as this user, because this user creates every record.
 const WINDOWS_ADMINISTRATORS_SID = "S-1-5-32-544";
-const WINDOWS_TRUSTED_WRITER_SIDS = [WINDOWS_ADMINISTRATORS_SID, "S-1-5-18"];
+const WINDOWS_TRUSTED_WRITER_SIDS = [WINDOWS_ADMINISTRATORS_SID, "S-1-5-18", "S-1-3-0"];
 
 // Rights that let an account replace a record: write and append data, write
 // attributes, delete, change permissions, take ownership, and the generic
@@ -59,9 +60,11 @@ const WINDOWS_TRUSTED_WRITER_SIDS = [WINDOWS_ADMINISTRATORS_SID, "S-1-5-18"];
 const WINDOWS_WRITE_RIGHTS = "0x500D0156";
 
 // The Windows form of the uid and mode checks: the owner, then every allow
-// entry that grants write rights. SIDs, not account names: names are
-// localized. The path goes through the environment, so PowerShell never parses
-// it. An ACL that cannot be read fails closed, like a foreign one.
+// entry that grants write rights, inherit-only ones too, because a record
+// gets its permissions from the entries of this directory. SIDs, not account
+// names: names are localized. The path goes through the environment, so
+// PowerShell never parses it. An ACL that cannot be read fails closed, like a
+// foreign one.
 function assertWindowsOwnerOnlyDirectory(directory: string): void {
   let lines: string[];
   try {
@@ -77,7 +80,6 @@ function assertWindowsOwnerOnlyDirectory(directory: string): void {
           "[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value; " +
           "$acl.GetAccessRules($true, $true, $sid) | Where-Object { " +
           "$_.AccessControlType -eq 'Allow' -and " +
-          "-not ($_.PropagationFlags -band [System.Security.AccessControl.PropagationFlags]::InheritOnly) -and " +
           `([int]$_.FileSystemRights -band ${WINDOWS_WRITE_RIGHTS}) } | ForEach-Object { $_.IdentityReference.Value }`,
       ],
       {
